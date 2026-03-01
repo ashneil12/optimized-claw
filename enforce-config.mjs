@@ -1764,6 +1764,62 @@ function ensureAgentBrowserContainers(configPath) {
   }
 }
 
+// ── Honcho Fork Enforcement ─────────────────────────────────────────────────
+
+/**
+ * Ensure the Honcho plugin is installed from our fork (github:ashneil12/openclaw-honcho-multiagent)
+ * rather than the vanilla npm version. Checks for the `unwrapMessage` marker in helpers.js
+ * which is unique to our patched version.
+ *
+ * Runs on every startup via the 'all' command. If the vanilla npm version is detected,
+ * reinstalls from the fork. If the fork is already installed, does nothing.
+ */
+function enforceHonchoFork() {
+  const dataDir = env("OPENCLAW_DATA_DIR", "/home/node/data");
+  const pluginDir = `${dataDir}/extensions/openclaw-honcho`;
+  const helpersPath = `${pluginDir}/dist/helpers.js`;
+
+  if (!existsSync(pluginDir)) {
+    // Plugin not installed yet — entrypoint handles initial install.
+    // We'll catch it on the next restart after entrypoint installs vanilla.
+    return;
+  }
+
+  if (!existsSync(helpersPath)) {
+    console.log(
+      "[enforce-config] Honcho plugin dir exists but helpers.js missing — skipping fork check",
+    );
+    return;
+  }
+
+  try {
+    const helpers = readFileSync(helpersPath, "utf8");
+    if (helpers.includes("unwrapMessage")) {
+      // Patched fork is already installed
+      return;
+    }
+
+    console.log("[enforce-config] Detected vanilla Honcho plugin — reinstalling from fork...");
+    execSync(
+      `npm install --prefix "${pluginDir}" github:ashneil12/openclaw-honcho-multiagent --no-save 2>&1`,
+      { encoding: "utf8", timeout: 60_000 },
+    );
+
+    // Copy dist files from installed package to plugin dir
+    const installedDist = `${pluginDir}/node_modules/@honcho-ai/openclaw-honcho/dist`;
+    if (existsSync(installedDist)) {
+      execSync(`cp -r "${installedDist}/"* "${pluginDir}/dist/"`, {
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+    }
+
+    console.log("[enforce-config] ✅ Honcho fork installed successfully");
+  } catch (err) {
+    console.error(`[enforce-config] ⚠ Honcho fork install failed (non-fatal): ${err.message}`);
+  }
+}
+
 // ── CLI Entry Point ─────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -1777,7 +1833,7 @@ const configPath = env(
 if (!command) {
   console.error("Usage: node enforce-config.mjs <command>");
   console.error(
-    "Commands: models, gateway, proxies, memory, core, cron-seed, browser-profiles, browser-containers, all",
+    "Commands: models, gateway, proxies, memory, core, cron-seed, browser-profiles, browser-containers, honcho-fork, all",
   );
   process.exit(1);
 }
@@ -1816,6 +1872,9 @@ try {
     case "providers":
       enforceProviders(configPath);
       break;
+    case "honcho-fork":
+      enforceHonchoFork();
+      break;
     case "all":
       enforceProviders(configPath);
       enforceModels(configPath);
@@ -1823,6 +1882,7 @@ try {
       enforceProxies(configPath);
       enforceMemory(configPath);
       enforceCore(configPath);
+      enforceHonchoFork();
       enforceBrowserProfiles(configPath);
       ensureAgentBrowserContainers(configPath);
       {
