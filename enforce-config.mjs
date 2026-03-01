@@ -8,13 +8,17 @@
 //   node enforce-config.mjs <command> [options]
 //
 // Commands:
-//   models       Enforce model settings (primary, heartbeat, subagent, fallbacks)
-//   gateway      Enforce gateway token
-//   proxies      Enforce trustedProxies CIDR ranges
-//   memory       Enforce QMD memory settings + embedding fallback
-//   core         Enforce core runtime settings (gateway port/bind, compaction, etc.)
-//   cron-seed    Seed default cron jobs (only if jobs.json doesn't exist)
-//   all          Run all enforcement steps in the correct order
+//   models              Enforce model settings (primary, heartbeat, subagent, fallbacks)
+//   gateway             Enforce gateway token
+//   proxies             Enforce trustedProxies CIDR ranges
+//   memory              Enforce QMD memory settings + embedding fallback
+//   core                Enforce core runtime settings (gateway port/bind, compaction, etc.)
+//   cron-seed           Seed default cron jobs (only if jobs.json doesn't exist)
+//   browser-profiles    Seed browser profiles for each agent
+//   browser-containers  Ensure browser containers exist for each agent
+//   providers           Register third-party model providers (e.g. Bailian)
+//   honcho-fork         Ensure Honcho plugin is the patched fork, not vanilla npm
+//   all                 Run all enforcement steps in the correct order
 // =============================================================================
 
 import { execSync } from "node:child_process";
@@ -273,10 +277,6 @@ function enforceProviders(configPath) {
   }
 
   writeConfig(configPath, config);
-
-  console.log(
-    `[enforce-config] \u2705 Bailian provider registered (${BAILIAN_MODELS.length} models)`,
-  );
 }
 
 // ── Enforcement Commands ────────────────────────────────────────────────────
@@ -1775,19 +1775,20 @@ function ensureAgentBrowserContainers(configPath) {
  * reinstalls from the fork. If the fork is already installed, does nothing.
  */
 function enforceHonchoFork() {
-  const dataDir = env("OPENCLAW_DATA_DIR", "/home/node/data");
-  const pluginDir = `${dataDir}/extensions/openclaw-honcho`;
+  // Plugin lives under STATE_DIR — must match docker-entrypoint.sh's HONCHO_PLUGIN_DIR.
+  const stateDir = env("OPENCLAW_STATE_DIR", "/home/node/.clawdbot");
+  const pluginDir = `${stateDir}/extensions/openclaw-honcho`;
   const helpersPath = `${pluginDir}/dist/helpers.js`;
 
   if (!existsSync(pluginDir)) {
     // Plugin not installed yet — entrypoint handles initial install.
-    // We'll catch it on the next restart after entrypoint installs vanilla.
+    // enforceHonchoFork will catch the vanilla version on next restart.
     return;
   }
 
   if (!existsSync(helpersPath)) {
     console.log(
-      "[enforce-config] Honcho plugin dir exists but helpers.js missing — skipping fork check",
+      "[enforce-config] Honcho plugin dir exists but dist/helpers.js missing — skipping fork check",
     );
     return;
   }
@@ -1795,26 +1796,40 @@ function enforceHonchoFork() {
   try {
     const helpers = readFileSync(helpersPath, "utf8");
     if (helpers.includes("unwrapMessage")) {
-      // Patched fork is already installed
+      // Patched fork is already installed — nothing to do.
       return;
     }
 
     console.log("[enforce-config] Detected vanilla Honcho plugin — reinstalling from fork...");
-    execSync(
-      `npm install --prefix "${pluginDir}" github:ashneil12/openclaw-honcho-multiagent --no-save 2>&1`,
-      { encoding: "utf8", timeout: 60_000 },
-    );
 
-    // Copy dist files from installed package to plugin dir
-    const installedDist = `${pluginDir}/node_modules/@honcho-ai/openclaw-honcho/dist`;
-    if (existsSync(installedDist)) {
-      execSync(`cp -r "${installedDist}/"* "${pluginDir}/dist/"`, {
+    // Clone the fork (which ships pre-built dist/ files) and copy dist/ into the plugin dir.
+    // No build step needed — the fork repo includes compiled JS.
+    const tmpDir = `/tmp/honcho-fork-${Date.now()}`;
+    try {
+      execSync(
+        `git clone --depth 1 https://github.com/ashneil12/openclaw-honcho-multiagent.git "${tmpDir}" 2>&1`,
+        { encoding: "utf8", timeout: 90_000 },
+      );
+
+      const clonedDist = `${tmpDir}/dist`;
+      if (!existsSync(clonedDist)) {
+        throw new Error(`Fork has no dist/ directory — unexpected repo structure`);
+      }
+
+      // Atomically replace the plugin's dist/ directory
+      execSync(`rm -rf "${pluginDir}/dist" && cp -r "${clonedDist}" "${pluginDir}/dist"`, {
         encoding: "utf8",
-        timeout: 10_000,
+        timeout: 15_000,
       });
-    }
 
-    console.log("[enforce-config] ✅ Honcho fork installed successfully");
+      console.log("[enforce-config] ✅ Honcho fork installed successfully");
+    } finally {
+      try {
+        execSync(`rm -rf "${tmpDir}"`, { encoding: "utf8", timeout: 10_000 });
+      } catch {
+        // Non-fatal cleanup failure
+      }
+    }
   } catch (err) {
     console.error(`[enforce-config] ⚠ Honcho fork install failed (non-fatal): ${err.message}`);
   }
