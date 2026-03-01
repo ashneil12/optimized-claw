@@ -580,13 +580,25 @@ if [ -n "$HONCHO_KEY" ]; then
       cp -a "$PREBAKED" "$HONCHO_PLUGIN_DIR"
       echo "[entrypoint] openclaw-honcho plugin installed (pre-baked)"
     else
-      echo "[entrypoint] Honcho API key detected — installing openclaw-honcho plugin..."
+      echo "[entrypoint] Honcho API key detected — installing openclaw-honcho plugin (patched fork)..."
       OPENCLAW_SCRIPT="/app/openclaw.mjs"
       if [ -f "$OPENCLAW_SCRIPT" ]; then
-        if node "$OPENCLAW_SCRIPT" plugins install @honcho-ai/openclaw-honcho 2>&1; then
-          echo "[entrypoint] openclaw-honcho plugin installed"
+        # Install from patched fork (github:ashneil12/openclaw-honcho-multiagent) which includes
+        # fixes for user message capture, session key routing, and OpenClaw message wrapper parsing.
+        PLUGIN_DEST="$(dirname "$HONCHO_PLUGIN_DIR")"
+        mkdir -p "$PLUGIN_DEST"
+        if git clone --depth=1 https://github.com/ashneil12/openclaw-honcho-multiagent.git "$HONCHO_PLUGIN_DIR" 2>&1 \
+          && cd "$HONCHO_PLUGIN_DIR" \
+          && npm install --omit=dev --ignore-scripts 2>/dev/null; then
+          echo "[entrypoint] openclaw-honcho plugin installed (patched fork)"
         else
-          echo "[entrypoint] WARNING: openclaw-honcho plugin install failed (non-fatal)"
+          echo "[entrypoint] WARNING: fork install failed, falling back to vanilla npm..."
+          rm -rf "$HONCHO_PLUGIN_DIR"
+          if node "$OPENCLAW_SCRIPT" plugins install @honcho-ai/openclaw-honcho 2>&1; then
+            echo "[entrypoint] openclaw-honcho plugin installed (vanilla npm fallback)"
+          else
+            echo "[entrypoint] WARNING: openclaw-honcho plugin install failed (non-fatal)"
+          fi
         fi
       fi
     fi

@@ -78,19 +78,20 @@ ENV NODE_ENV=production
 # Make our custom entrypoint executable
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Pre-bake Honcho memory plugin into the image.
+# Pre-bake Honcho memory plugin into the image (patched fork).
+# Uses github:ashneil12/openclaw-honcho-multiagent instead of vanilla npm,
+# which includes fixes for user message capture, session key routing,
+# and OpenClaw message wrapper parsing.
 # Installing at build time (as root) ensures correct uid=0 ownership.
 # The entrypoint copies it to the data volume on startup, avoiding the
 # runtime npm install that creates files with uid=1000 (rejected by the
 # plugin scanner as "suspicious ownership").
 RUN mkdir -p /app/prebaked-plugins \
   && cd /tmp \
-  && npm pack @honcho-ai/openclaw-honcho 2>/dev/null \
-  && tar xzf honcho-ai-openclaw-honcho-*.tgz \
-  && mv package /app/prebaked-plugins/openclaw-honcho \
+  && git clone --depth=1 https://github.com/ashneil12/openclaw-honcho-multiagent.git honcho-fork \
+  && mv honcho-fork /app/prebaked-plugins/openclaw-honcho \
   && cd /app/prebaked-plugins/openclaw-honcho \
-  && npm install --omit=dev --ignore-scripts 2>/dev/null \
-  && rm -rf /tmp/honcho-ai-openclaw-honcho-*.tgz /tmp/package
+  && npm install --omit=dev --ignore-scripts 2>/dev/null
 
 # Run entrypoint as root — the gateway process stays root for Docker socket access,
 # npm global installs, and Honcho plugin ownership (uid=0 required by plugin scanner).
