@@ -329,9 +329,9 @@ if [ "$AUTO_ONBOARD" = "true" ] || [ "$AUTO_ONBOARD" = "1" ]; then
   # CRITICAL: Re-enforce ALL model settings from env vars after onboard.
   # The onboard process overwrites agents.defaults.model.primary with its own
   # default (anthropic/claude-opus-4.6). We must patch the config to restore
-  # the preset models that the entrypoint originally set.
+  # the model settings the entrypoint originally set.
   if [ -s "$CONFIG_FILE" ]; then
-    echo "[entrypoint] Re-enforcing preset model settings after onboard..."
+    echo "[entrypoint] Re-enforcing model settings after onboard..."
     if command -v jq &> /dev/null; then
       JQ_FILTER='.'
       if [ -n "$DEFAULT_MODEL" ]; then
