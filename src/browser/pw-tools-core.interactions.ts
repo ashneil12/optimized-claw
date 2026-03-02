@@ -1,4 +1,8 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { BrowserFormField } from "./client-actions-core.js";
+import { getDownloadWorkspaceForCdp } from "./download-workspace-registry.js";
 import { DEFAULT_FILL_FIELD_TYPE } from "./form-fields.js";
 import { DEFAULT_UPLOAD_DIR, resolveStrictExistingPathsWithinRoot } from "./paths.js";
 import {
@@ -9,6 +13,8 @@ import {
   restoreRoleRefsForTarget,
 } from "./pw-session.js";
 import { normalizeTimeoutMs, requireRef, toAIFriendlyError } from "./pw-tools-core.shared.js";
+
+const log = createSubsystemLogger("browser/auto-download");
 
 export async function highlightViaPlaywright(opts: {
   cdpUrl: string;
@@ -39,11 +45,28 @@ export async function clickViaPlaywright(opts: {
     cdpUrl: opts.cdpUrl,
     targetId: opts.targetId,
   });
-  ensurePageState(page);
+  const state = ensurePageState(page);
   restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
   const ref = requireRef(opts.ref);
   const locator = refLocator(page, ref);
   const timeout = Math.max(500, Math.min(60_000, Math.floor(opts.timeoutMs ?? 8000)));
+
+  // Only attempt auto-download capture if no explicit waitfordownload waiter is armed
+  // AND a workspace is registered for this profile.
+  const workspaceDir = state.armIdDownload <= 0 ? getDownloadWorkspaceForCdp(opts.cdpUrl) : null;
+
+  // Set up the download race BEFORE the click so we catch immediate downloads.
+  // Use Promise.race: download resolves if Chrome fires a download event within 3s,
+  // otherwise the timeout branch resolves to null (not an error).
+  const AUTO_DOWNLOAD_WAIT_MS = 3_000;
+  let downloadRace: Promise<unknown> | null = null;
+  if (workspaceDir) {
+    downloadRace = Promise.race([
+      page.waitForEvent("download", { timeout: AUTO_DOWNLOAD_WAIT_MS }).catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, AUTO_DOWNLOAD_WAIT_MS + 100, null)),
+    ]);
+  }
+
   try {
     if (opts.doubleClick) {
       await locator.dblclick({
@@ -60,6 +83,33 @@ export async function clickViaPlaywright(opts: {
     }
   } catch (err) {
     throw toAIFriendlyError(err, ref);
+  }
+
+  // Best-effort download capture — don't block the click response on it.
+  if (downloadRace && workspaceDir) {
+    void (async () => {
+      try {
+        const download = (await downloadRace) as {
+          suggestedFilename?: () => string;
+          saveAs?: (p: string) => Promise<void>;
+        } | null;
+        if (!download?.suggestedFilename || !download?.saveAs) {
+          return; // No download fired within the window.
+        }
+        const filename = download.suggestedFilename();
+        const ts = Date.now();
+        const ext = path.extname(filename);
+        const stem = ext ? filename.slice(0, filename.length - ext.length) : filename;
+        const safe = `${stem}-${ts}${ext}`;
+        const downloadsDir = path.join(workspaceDir, "downloads");
+        const outPath = path.join(downloadsDir, safe);
+        await fs.mkdir(downloadsDir, { recursive: true });
+        await download.saveAs(outPath);
+        log.info(`auto-saved download → ${outPath}`);
+      } catch (err) {
+        log.warn(`auto-download capture failed: ${String(err)}`);
+      }
+    })();
   }
 }
 
