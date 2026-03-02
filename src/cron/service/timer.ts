@@ -736,17 +736,27 @@ export async function executeJobCore(
             agentId: job.agentId,
             sessionKey: job.sessionKey,
           });
-          return { status: "ok", summary: text };
+          return { status: "ok", summary: text, nextRunAfterMs: parseNextWakeDuration(text) };
         }
         await waitWithAbort(retryDelayMs);
       }
 
       if (heartbeatResult.status === "ran") {
-        return { status: "ok", summary: text };
+        return { status: "ok", summary: text, nextRunAfterMs: parseNextWakeDuration(text) };
       } else if (heartbeatResult.status === "skipped") {
-        return { status: "skipped", error: heartbeatResult.reason, summary: text };
+        return {
+          status: "skipped",
+          error: heartbeatResult.reason,
+          summary: text,
+          nextRunAfterMs: parseNextWakeDuration(text),
+        };
       } else {
-        return { status: "error", error: heartbeatResult.reason, summary: text };
+        return {
+          status: "error",
+          error: heartbeatResult.reason,
+          summary: text,
+          nextRunAfterMs: parseNextWakeDuration(text),
+        };
       }
     } else {
       if (abortSignal?.aborted) {
@@ -757,7 +767,7 @@ export async function executeJobCore(
         agentId: job.agentId,
         sessionKey: job.sessionKey,
       });
-      return { status: "ok", summary: text };
+      return { status: "ok", summary: text, nextRunAfterMs: parseNextWakeDuration(text) };
     }
   }
 
@@ -822,7 +832,7 @@ export async function executeJobCore(
     model: res.model,
     provider: res.provider,
     usage: res.usage,
-    nextRunAfterMs: parseNextWakeDuration(res.summary),
+    nextRunAfterMs: parseNextWakeDuration(res.outputText ?? res.summary),
   };
 }
 

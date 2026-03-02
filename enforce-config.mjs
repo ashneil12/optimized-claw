@@ -880,7 +880,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
       enabled: true,
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
-      schedule: { kind: "every", everyMs: 21600000, anchorMs: nowMs }, // 6h
+      schedule: { kind: "every", everyMs: 43200000, anchorMs: nowMs }, // 12h
       sessionTarget: "isolated",
       wakeMode: "next-heartbeat",
       payload: {
@@ -931,7 +931,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
       enabled: reflectionEnabled,
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
-      schedule: { kind: "every", everyMs: 7200000, anchorMs: nowMs }, // 2h
+      schedule: { kind: "every", everyMs: 18000000, anchorMs: nowMs }, // 5h
       sessionTarget: "isolated",
       wakeMode: "next-heartbeat",
       payload: {
