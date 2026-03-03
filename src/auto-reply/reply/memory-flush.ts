@@ -14,7 +14,13 @@ export const DEFAULT_MEMORY_FLUSH_PROMPT = [
   "Pre-compaction memory flush.",
   "Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed).",
   "IMPORTANT: If the file already exists, APPEND new content only and do not overwrite existing entries.",
-  `If nothing to store, reply with ${SILENT_REPLY_TOKEN}.`,
+  "",
+  "Also update memory/session-context.md with a concise summary of this session so far.",
+  "Include: what the user discussed, key decisions made, anything in progress or unfinished.",
+  "Prepend the new summary with a date/time header (## Session context as of YYYY-MM-DD HH:MM UTC).",
+  "If the file already exists, prepend the new summary above existing content.",
+  "Keep the total file under 20000 characters — truncate older entries at the bottom if needed.",
+  `If nothing to store and no session context to summarize, reply with ${SILENT_REPLY_TOKEN}.`,
 ].join(" ");
 
 export const DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT = [

@@ -735,6 +735,18 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
     // Optional — diary may not exist yet
   }
 
+  // Session context: rolling summary of recent sessions for continuity across resets.
+  const sessionContextPath = path.join(resolvedDir, "memory", "session-context.md");
+  try {
+    await fs.access(sessionContextPath);
+    entries.push({
+      name: "session-context.md" as WorkspaceBootstrapFileName,
+      filePath: sessionContextPath,
+    });
+  } catch {
+    // Optional — session context may not exist yet
+  }
+
   // Knowledge index: rebuild before loading so the index is fresh.
   const knowledgeIndexPath = path.join(
     resolvedDir,

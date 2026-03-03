@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { resolveSessionAgentId } from "../../agents/agent-scope.js";
+import { resolveSessionAgentId, resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
+import { DEFAULT_AGENT_WORKSPACE_DIR } from "../../agents/workspace.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
@@ -412,6 +413,22 @@ export async function initSessionState(params: {
         }),
     },
   );
+
+  // Persist session context summary before archiving so the next session has
+  // continuity. Best-effort: reads recent user messages from the outgoing
+  // transcript and writes a structured summary to memory/session-context.md.
+  if (previousSessionEntry?.sessionFile) {
+    try {
+      const { persistSessionContextOnReset } = await import("./session-context-summary.js");
+      const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId) ?? DEFAULT_AGENT_WORKSPACE_DIR;
+      persistSessionContextOnReset({
+        transcriptPath: previousSessionEntry.sessionFile,
+        workspaceDir,
+      });
+    } catch {
+      // Best-effort — session context summary is non-critical
+    }
+  }
 
   // Archive old transcript so it doesn't accumulate on disk (#14869).
   if (previousSessionEntry?.sessionId) {
