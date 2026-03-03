@@ -1828,7 +1828,55 @@ function enforceHonchoFork() {
   try {
     const helpers = readFileSync(helpersPath, "utf8");
     if (helpers.includes("unwrapMessage")) {
-      // Patched fork is already installed — nothing to do.
+      // Patched fork is already installed — but ensure manifest exists.
+      // The fork repo may have been cloned without openclaw.plugin.json,
+      // which causes OpenClaw's config validator to reject the plugin.
+      const manifestPath = `${pluginDir}/openclaw.plugin.json`;
+      if (!existsSync(manifestPath)) {
+        console.log(
+          "[enforce-config] Generating missing openclaw.plugin.json for existing honcho fork...",
+        );
+        writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              id: "openclaw-honcho",
+              kind: "memory",
+              uiHints: {
+                apiKey: {
+                  label: "Honcho API Key",
+                  sensitive: true,
+                  placeholder: "hch-v3-...",
+                  help: "API key for Honcho memory service",
+                },
+                baseUrl: {
+                  label: "Base URL",
+                  placeholder: "https://api.honcho.dev",
+                  help: "Honcho API base URL",
+                  advanced: true,
+                },
+                workspaceId: {
+                  label: "Workspace ID",
+                  placeholder: "openclaw",
+                  help: "Honcho workspace/app identifier",
+                  advanced: true,
+                },
+              },
+              configSchema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  apiKey: { type: "string" },
+                  baseUrl: { type: "string" },
+                  workspaceId: { type: "string" },
+                },
+              },
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      }
       return;
     }
 
@@ -1859,6 +1907,55 @@ function enforceHonchoFork() {
       execSync(`mv "${distNew}" "${distOld}"`, { encoding: "utf8", timeout: 5_000 });
 
       console.log("[enforce-config] ✅ Honcho fork installed successfully");
+
+      // Guard: generate openclaw.plugin.json if the fork repo doesn't include it.
+      // Without this manifest, OpenClaw's config validator rejects the plugin.
+      const manifestPath = `${pluginDir}/openclaw.plugin.json`;
+      if (!existsSync(manifestPath)) {
+        console.log(
+          "[enforce-config] Generating missing openclaw.plugin.json for honcho plugin...",
+        );
+        writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              id: "openclaw-honcho",
+              kind: "memory",
+              uiHints: {
+                apiKey: {
+                  label: "Honcho API Key",
+                  sensitive: true,
+                  placeholder: "hch-v3-...",
+                  help: "API key for Honcho memory service",
+                },
+                baseUrl: {
+                  label: "Base URL",
+                  placeholder: "https://api.honcho.dev",
+                  help: "Honcho API base URL",
+                  advanced: true,
+                },
+                workspaceId: {
+                  label: "Workspace ID",
+                  placeholder: "openclaw",
+                  help: "Honcho workspace/app identifier",
+                  advanced: true,
+                },
+              },
+              configSchema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  apiKey: { type: "string" },
+                  baseUrl: { type: "string" },
+                  workspaceId: { type: "string" },
+                },
+              },
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      }
     } finally {
       try {
         execSync(`rm -rf "${tmpDir}"`, { encoding: "utf8", timeout: 10_000 });

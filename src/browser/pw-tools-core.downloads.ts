@@ -3,8 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright-core";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
-import { sanitizeDownloadFilename } from "./download-workspace-registry.js";
-import { DEFAULT_UPLOAD_DIR, resolveStrictExistingPathsWithinRoot } from "./paths.js";
+import { writeViaSiblingTempPath } from "./output-atomic.js";
+import {
+  DEFAULT_DOWNLOAD_DIR,
+  DEFAULT_UPLOAD_DIR,
+  resolveStrictExistingPathsWithinRoot,
+} from "./paths.js";
 import {
   ensurePageState,
   getPageForTargetId,
@@ -19,10 +23,11 @@ import {
   requireRef,
   toAIFriendlyError,
 } from "./pw-tools-core.shared.js";
+import { sanitizeUntrustedFileName } from "./safe-filename.js";
 
 function buildTempDownloadPath(fileName: string): string {
   const id = crypto.randomUUID();
-  const safeName = sanitizeDownloadFilename(fileName);
+  const safeName = sanitizeUntrustedFileName(fileName, "download.bin");
   return path.join(resolvePreferredOpenClawTmpDir(), "downloads", `${id}-${safeName}`);
 }
 
@@ -83,13 +88,26 @@ type DownloadPayload = {
 
 async function saveDownloadPayload(download: DownloadPayload, outPath: string) {
   const suggested = download.suggestedFilename?.() || "download.bin";
-  const resolvedOutPath = outPath?.trim() || buildTempDownloadPath(suggested);
+  const requestedPath = outPath?.trim();
+  const resolvedOutPath = path.resolve(requestedPath || buildTempDownloadPath(suggested));
   await fs.mkdir(path.dirname(resolvedOutPath), { recursive: true });
-  await download.saveAs?.(resolvedOutPath);
+
+  if (!requestedPath) {
+    await download.saveAs?.(resolvedOutPath);
+  } else {
+    await writeViaSiblingTempPath({
+      rootDir: DEFAULT_DOWNLOAD_DIR,
+      targetPath: resolvedOutPath,
+      writeTemp: async (tempPath) => {
+        await download.saveAs?.(tempPath);
+      },
+    });
+  }
+
   return {
     url: download.url?.() || "",
     suggestedFilename: suggested,
-    path: path.resolve(resolvedOutPath),
+    path: resolvedOutPath,
   };
 }
 

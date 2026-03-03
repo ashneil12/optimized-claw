@@ -589,6 +589,47 @@ if [ -n "$HONCHO_KEY" ]; then
         mkdir -p "$PLUGIN_DEST"
         if git clone --depth=1 https://github.com/ashneil12/openclaw-honcho-multiagent.git "$HONCHO_PLUGIN_DIR" 2>&1 \
           && (cd "$HONCHO_PLUGIN_DIR" && npm install --omit=dev --ignore-scripts 2>/dev/null); then
+          # Guard: generate openclaw.plugin.json if the fork repo doesn't include it.
+          # Without this manifest, OpenClaw's config validator rejects the plugin and
+          # the gateway crash-loops with "plugin manifest not found".
+          if [ ! -f "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" ]; then
+            echo "[entrypoint] Generating missing openclaw.plugin.json for honcho plugin..."
+            cat > "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" << 'PLUGINJSON'
+{
+  "id": "openclaw-honcho",
+  "kind": "memory",
+  "uiHints": {
+    "apiKey": {
+      "label": "Honcho API Key",
+      "sensitive": true,
+      "placeholder": "hch-v3-...",
+      "help": "API key for Honcho memory service (or use ${HONCHO_API_KEY})"
+    },
+    "baseUrl": {
+      "label": "Base URL",
+      "placeholder": "https://api.honcho.dev",
+      "help": "Honcho API base URL",
+      "advanced": true
+    },
+    "workspaceId": {
+      "label": "Workspace ID",
+      "placeholder": "openclaw",
+      "help": "Honcho workspace/app identifier",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": { "type": "string" },
+      "baseUrl": { "type": "string" },
+      "workspaceId": { "type": "string" }
+    }
+  }
+}
+PLUGINJSON
+          fi
           echo "[entrypoint] openclaw-honcho plugin installed (patched fork)"
         else
           echo "[entrypoint] WARNING: fork install failed, falling back to vanilla npm..."
@@ -603,6 +644,46 @@ if [ -n "$HONCHO_KEY" ]; then
     fi
   else
     echo "[entrypoint] openclaw-honcho plugin already installed"
+    # Guard: ensure manifest exists even for pre-existing installs.
+    # The fork repo may be missing openclaw.plugin.json, causing crash loops.
+    if [ ! -f "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" ]; then
+      echo "[entrypoint] Generating missing openclaw.plugin.json for existing honcho plugin..."
+      cat > "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" << 'PLUGINJSON'
+{
+  "id": "openclaw-honcho",
+  "kind": "memory",
+  "uiHints": {
+    "apiKey": {
+      "label": "Honcho API Key",
+      "sensitive": true,
+      "placeholder": "hch-v3-...",
+      "help": "API key for Honcho memory service (or use ${HONCHO_API_KEY})"
+    },
+    "baseUrl": {
+      "label": "Base URL",
+      "placeholder": "https://api.honcho.dev",
+      "help": "Honcho API base URL",
+      "advanced": true
+    },
+    "workspaceId": {
+      "label": "Workspace ID",
+      "placeholder": "openclaw",
+      "help": "Honcho workspace/app identifier",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": { "type": "string" },
+      "baseUrl": { "type": "string" },
+      "workspaceId": { "type": "string" }
+    }
+  }
+}
+PLUGINJSON
+    fi
   fi
 
   # Fix ownership: plugin may have been installed under uid=1000 (legacy node user).

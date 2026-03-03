@@ -42,12 +42,12 @@ describe("handleControlUiHttpRequest", () => {
 
   async function runControlUiRequest(params: {
     url: string;
-    method: "GET" | "HEAD";
+    method: "GET" | "HEAD" | "POST";
     rootPath: string;
     basePath?: string;
   }) {
     const { res, end } = makeMockHttpResponse();
-    const handled = await handleControlUiHttpRequest(
+    const handled = handleControlUiHttpRequest(
       { url: params.url, method: params.method } as IncomingMessage,
       res,
       {
@@ -65,7 +65,7 @@ describe("handleControlUiHttpRequest", () => {
     basePath?: string;
   }) {
     const { res, end } = makeMockHttpResponse();
-    const handled = await handleControlUiAvatarRequest(
+    const handled = handleControlUiAvatarRequest(
       { url: params.url, method: params.method } as IncomingMessage,
       res,
       {
@@ -105,7 +105,7 @@ describe("handleControlUiHttpRequest", () => {
     await withControlUiRoot({
       fn: async (tmp) => {
         const { res, setHeader } = makeMockHttpResponse();
-        const handled = await handleControlUiHttpRequest(
+        const handled = handleControlUiHttpRequest(
           { url: "/", method: "GET" } as IncomingMessage,
           res,
           {
@@ -129,7 +129,7 @@ describe("handleControlUiHttpRequest", () => {
       indexHtml: html,
       fn: async (tmp) => {
         const { res, end } = makeMockHttpResponse();
-        const handled = await handleControlUiHttpRequest(
+        const handled = handleControlUiHttpRequest(
           { url: "/", method: "GET" } as IncomingMessage,
           res,
           {
@@ -150,7 +150,7 @@ describe("handleControlUiHttpRequest", () => {
     await withControlUiRoot({
       fn: async (tmp) => {
         const { res, end } = makeMockHttpResponse();
-        const handled = await handleControlUiHttpRequest(
+        const handled = handleControlUiHttpRequest(
           { url: CONTROL_UI_BOOTSTRAP_CONFIG_PATH, method: "GET" } as IncomingMessage,
           res,
           {
@@ -175,7 +175,7 @@ describe("handleControlUiHttpRequest", () => {
     await withControlUiRoot({
       fn: async (tmp) => {
         const { res, end } = makeMockHttpResponse();
-        const handled = await handleControlUiHttpRequest(
+        const handled = handleControlUiHttpRequest(
           { url: `/openclaw${CONTROL_UI_BOOTSTRAP_CONFIG_PATH}`, method: "GET" } as IncomingMessage,
           res,
           {
@@ -251,7 +251,7 @@ describe("handleControlUiHttpRequest", () => {
           await fs.symlink(outsideFile, path.join(assetsDir, "leak.txt"));
 
           const { res, end } = makeMockHttpResponse();
-          const handled = await handleControlUiHttpRequest(
+          const handled = handleControlUiHttpRequest(
             { url: "/assets/leak.txt", method: "GET" } as IncomingMessage,
             res,
             {
@@ -321,6 +321,99 @@ describe("handleControlUiHttpRequest", () => {
           expectNotFoundResponse({ handled, res, end });
         } finally {
           await fs.rm(outsideDir, { recursive: true, force: true });
+        }
+      },
+    });
+  });
+
+  it("does not handle POST to root-mounted paths (plugin webhook passthrough)", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        for (const webhookPath of ["/bluebubbles-webhook", "/custom-webhook", "/callback"]) {
+          const { res } = makeMockHttpResponse();
+          const handled = handleControlUiHttpRequest(
+            { url: webhookPath, method: "POST" } as IncomingMessage,
+            res,
+            { root: { kind: "resolved", path: tmp } },
+          );
+          expect(handled, `POST to ${webhookPath} should pass through to plugin handlers`).toBe(
+            false,
+          );
+        }
+      },
+    });
+  });
+
+  it("does not handle POST to paths outside basePath", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        const { res } = makeMockHttpResponse();
+        const handled = handleControlUiHttpRequest(
+          { url: "/bluebubbles-webhook", method: "POST" } as IncomingMessage,
+          res,
+          { basePath: "/openclaw", root: { kind: "resolved", path: tmp } },
+        );
+        expect(handled).toBe(false);
+      },
+    });
+  });
+
+  it("does not handle /api paths when basePath is empty", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        for (const apiPath of ["/api", "/api/sessions", "/api/channels/nostr"]) {
+          const { handled } = await runControlUiRequest({
+            url: apiPath,
+            method: "GET",
+            rootPath: tmp,
+          });
+          expect(handled, `expected ${apiPath} to not be handled`).toBe(false);
+        }
+      },
+    });
+  });
+
+  it("does not handle /plugins paths when basePath is empty", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        for (const pluginPath of ["/plugins", "/plugins/diffs/view/abc/def"]) {
+          const { handled } = await runControlUiRequest({
+            url: pluginPath,
+            method: "GET",
+            rootPath: tmp,
+          });
+          expect(handled, `expected ${pluginPath} to not be handled`).toBe(false);
+        }
+      },
+    });
+  });
+
+  it("falls through POST requests when basePath is empty", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        const { handled, end } = await runControlUiRequest({
+          url: "/webhook/bluebubbles",
+          method: "POST",
+          rootPath: tmp,
+        });
+        expect(handled).toBe(false);
+        expect(end).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it("falls through POST requests under configured basePath (plugin webhook passthrough)", async () => {
+    await withControlUiRoot({
+      fn: async (tmp) => {
+        for (const route of ["/openclaw", "/openclaw/", "/openclaw/some-page"]) {
+          const { handled, end } = await runControlUiRequest({
+            url: route,
+            method: "POST",
+            rootPath: tmp,
+            basePath: "/openclaw",
+          });
+          expect(handled, `POST to ${route} should pass through to plugin handlers`).toBe(false);
+          expect(end, `POST to ${route} should not write a response`).not.toHaveBeenCalled();
         }
       },
     });

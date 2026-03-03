@@ -1,3 +1,5 @@
+import { loadConfig } from "../config/config.js";
+import type { OpenClawConfig } from "../config/config.js";
 import { emitDiagnosticEvent } from "../infra/diagnostic-events.js";
 import {
   diagnosticSessionStates,
@@ -20,9 +22,24 @@ const webhookStats = {
 };
 
 let lastActivityAt = 0;
+const DEFAULT_STUCK_SESSION_WARN_MS = 120_000;
+const MIN_STUCK_SESSION_WARN_MS = 1_000;
+const MAX_STUCK_SESSION_WARN_MS = 24 * 60 * 60 * 1000;
 
 function markActivity() {
   lastActivityAt = Date.now();
+}
+
+export function resolveStuckSessionWarnMs(config?: OpenClawConfig): number {
+  const raw = config?.diagnostics?.stuckSessionWarnMs;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_STUCK_SESSION_WARN_MS;
+  }
+  const rounded = Math.floor(raw);
+  if (rounded < MIN_STUCK_SESSION_WARN_MS || rounded > MAX_STUCK_SESSION_WARN_MS) {
+    return DEFAULT_STUCK_SESSION_WARN_MS;
+  }
+  return rounded;
 }
 
 export function logWebhookReceived(params: {
@@ -306,11 +323,20 @@ export function logActiveRuns() {
 let heartbeatInterval: NodeJS.Timeout | null = null;
 let healthCheckCycleCount = 0;
 
-export function startDiagnosticHeartbeat() {
+export function startDiagnosticHeartbeat(config?: OpenClawConfig) {
   if (heartbeatInterval) {
     return;
   }
   heartbeatInterval = setInterval(() => {
+    let heartbeatConfig = config;
+    if (!heartbeatConfig) {
+      try {
+        heartbeatConfig = loadConfig();
+      } catch {
+        heartbeatConfig = undefined;
+      }
+    }
+    const stuckSessionWarnMs = resolveStuckSessionWarnMs(heartbeatConfig);
     const now = Date.now();
     pruneDiagnosticSessionStates(now, true);
     const activeCount = Array.from(diagnosticSessionStates.values()).filter(
@@ -366,9 +392,7 @@ export function startDiagnosticHeartbeat() {
     if (healthCheckCycleCount >= 10) {
       healthCheckCycleCount = 0;
       import("./diagnostics-toolkit.js")
-        .then(({ runHealthCheck }) =>
-          runHealthCheck({ errorWindowHours: 1, errorThreshold: 50 }),
-        )
+        .then(({ runHealthCheck }) => runHealthCheck({ errorWindowHours: 1, errorThreshold: 50 }))
         .then((report) => {
           if (!report.healthy) {
             diag.warn?.(
@@ -405,7 +429,7 @@ export function startDiagnosticHeartbeat() {
 
     for (const [, state] of diagnosticSessionStates) {
       const ageMs = now - state.lastActivity;
-      if (state.state === "processing" && ageMs > 120_000) {
+      if (state.state === "processing" && ageMs > stuckSessionWarnMs) {
         logSessionStuck({
           sessionId: state.sessionId,
           sessionKey: state.sessionKey,

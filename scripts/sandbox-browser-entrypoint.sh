@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+dedupe_chrome_args() {
+  local -A seen_args=()
+  local -a unique_args=()
+
+  for arg in "${CHROME_ARGS[@]}"; do
+    if [[ -n "${seen_args["$arg"]:+x}" ]]; then
+      continue
+    fi
+    seen_args["$arg"]=1
+    unique_args+=("$arg")
+  done
+
+  CHROME_ARGS=("${unique_args[@]}")
+}
+
 export DISPLAY=:1
 export HOME=/tmp/openclaw-home
 export XDG_CONFIG_HOME="${HOME}/.config"
@@ -15,6 +30,9 @@ HEADLESS="${OPENCLAW_BROWSER_HEADLESS:-${CLAWDBOT_BROWSER_HEADLESS:-0}}"
 ALLOW_NO_SANDBOX="${OPENCLAW_BROWSER_NO_SANDBOX:-${CLAWDBOT_BROWSER_NO_SANDBOX:-0}}"
 NOVNC_PASSWORD="${OPENCLAW_BROWSER_NOVNC_PASSWORD:-${CLAWDBOT_BROWSER_NOVNC_PASSWORD:-}}"
 NOVNC_NO_AUTH="${OPENCLAW_BROWSER_NOVNC_NO_AUTH:-0}"
+DISABLE_GRAPHICS_FLAGS="${OPENCLAW_BROWSER_DISABLE_GRAPHICS_FLAGS:-1}"
+DISABLE_EXTENSIONS="${OPENCLAW_BROWSER_DISABLE_EXTENSIONS:-1}"
+RENDERER_PROCESS_LIMIT="${OPENCLAW_BROWSER_RENDERER_PROCESS_LIMIT:-2}"
 
 mkdir -p "${HOME}" "${HOME}/.chrome" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}"
 
@@ -59,10 +77,31 @@ CHROME_ARGS+=(
   "--disable-features=TranslateUI"
   "--disable-breakpad"
   "--disable-crash-reporter"
+  "--no-zygote"
   "--metrics-recording-only"
   "--start-maximized"
   "--window-size=1280,800"
 )
+
+DISABLE_GRAPHICS_FLAGS_LOWER="${DISABLE_GRAPHICS_FLAGS,,}"
+if [[ "${DISABLE_GRAPHICS_FLAGS_LOWER}" == "1" || "${DISABLE_GRAPHICS_FLAGS_LOWER}" == "true" || "${DISABLE_GRAPHICS_FLAGS_LOWER}" == "yes" || "${DISABLE_GRAPHICS_FLAGS_LOWER}" == "on" ]]; then
+  CHROME_ARGS+=(
+    "--disable-3d-apis"
+    "--disable-gpu"
+    "--disable-software-rasterizer"
+  )
+fi
+
+DISABLE_EXTENSIONS_LOWER="${DISABLE_EXTENSIONS,,}"
+if [[ "${DISABLE_EXTENSIONS_LOWER}" == "1" || "${DISABLE_EXTENSIONS_LOWER}" == "true" || "${DISABLE_EXTENSIONS_LOWER}" == "yes" || "${DISABLE_EXTENSIONS_LOWER}" == "on" ]]; then
+  CHROME_ARGS+=(
+    "--disable-extensions"
+  )
+fi
+
+if [[ "${RENDERER_PROCESS_LIMIT}" =~ ^[0-9]+$ && "${RENDERER_PROCESS_LIMIT}" -gt 0 ]]; then
+  CHROME_ARGS+=("--renderer-process-limit=${RENDERER_PROCESS_LIMIT}")
+fi
 
 if [[ "${ALLOW_NO_SANDBOX}" == "1" ]]; then
   CHROME_ARGS+=(
@@ -72,6 +111,7 @@ if [[ "${ALLOW_NO_SANDBOX}" == "1" ]]; then
   )
 fi
 
+dedupe_chrome_args
 chromium "${CHROME_ARGS[@]}" about:blank &
 
 for _ in $(seq 1 50); do

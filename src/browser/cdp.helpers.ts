@@ -1,8 +1,8 @@
-import http from "node:http";
-import https from "node:https";
 import WebSocket from "ws";
 import { isLoopbackHost } from "../gateway/net.js";
 import { rawDataToString } from "../infra/ws.js";
+import { getDirectAgentForCdp, withNoProxyForCdpUrl } from "./cdp-proxy-bypass.js";
+import { CDP_HTTP_REQUEST_TIMEOUT_MS, CDP_WS_HANDSHAKE_TIMEOUT_MS } from "./cdp-timeouts.js";
 import { getChromeExtensionRelayAuthHeaders } from "./extension-relay.js";
 
 export { isLoopbackHost };
@@ -125,92 +125,27 @@ function createCdpSender(ws: WebSocket) {
   return { send, closeWithError };
 }
 
-export async function fetchJson<T>(url: string, timeoutMs = 1500, init?: RequestInit): Promise<T> {
-  const res = await fetchChecked(url, timeoutMs, init);
+export async function fetchJson<T>(
+  url: string,
+  timeoutMs = CDP_HTTP_REQUEST_TIMEOUT_MS,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetchCdpChecked(url, timeoutMs, init);
   return (await res.json()) as T;
 }
 
-/**
- * Make an HTTP request using Node.js `http.request()` which, unlike `fetch()`,
- * allows overriding the `Host` header.  Returns a minimal Response-compatible
- * object so callers can use it the same way as `fetch()`.
- *
- * Background: Node.js `fetch()` (undici) treats `Host` as a forbidden header
- * per the Fetch spec and silently ignores it.  Chrome 107+ rejects CDP HTTP
- * requests when the Host header isn't an IP or "localhost", so Docker service
- * hostnames (e.g. "browser") cause connection failures.
- */
-function httpRequestWithHostOverride(
+export async function fetchCdpChecked(
   url: string,
-  headers: Record<string, string>,
-  method: string,
-  signal?: AbortSignal,
+  timeoutMs = CDP_HTTP_REQUEST_TIMEOUT_MS,
+  init?: RequestInit,
 ): Promise<Response> {
-  return new Promise<Response>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new Error("aborted"));
-      return;
-    }
-
-    const parsed = new URL(url);
-    const isHttps = parsed.protocol === "https:";
-    const transport = isHttps ? https : http;
-
-    const req = transport.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port || (isHttps ? 443 : 80),
-        path: `${parsed.pathname}${parsed.search}`,
-        method,
-        headers,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => {
-          const body = Buffer.concat(chunks).toString("utf-8");
-          resolve(
-            new Response(body, {
-              status: res.statusCode ?? 500,
-              statusText: res.statusMessage ?? "",
-              headers: res.headers as Record<string, string>,
-            }),
-          );
-        });
-        res.on("error", reject);
-      },
-    );
-
-    req.on("error", reject);
-
-    const onAbort = () => {
-      req.destroy();
-      reject(signal?.reason ?? new Error("aborted"));
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-    req.on("close", () => signal?.removeEventListener("abort", onAbort));
-
-    req.end();
-  });
-}
-
-async function fetchChecked(url: string, timeoutMs = 1500, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(ctrl.abort.bind(ctrl), timeoutMs);
   try {
     const headers = getHeadersWithAuth(url, (init?.headers as Record<string, string>) || {});
-    // Node.js fetch() treats Host as a forbidden header and silently ignores it.
-    // When we need a Host override (Docker hostnames for CDP), use http.request()
-    // which respects custom Host headers.
-    const hostOverride = headers["Host"];
-    const res = hostOverride
-      ? await httpRequestWithHostOverride(
-          url,
-          headers,
-          init?.method?.toUpperCase() ?? "GET",
-          ctrl.signal,
-        )
-      : await fetch(url, { ...init, headers, signal: ctrl.signal });
+    const res = await withNoProxyForCdpUrl(url, () =>
+      fetch(url, { ...init, headers, signal: ctrl.signal }),
+    );
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
@@ -220,8 +155,29 @@ async function fetchChecked(url: string, timeoutMs = 1500, init?: RequestInit): 
   }
 }
 
-export async function fetchOk(url: string, timeoutMs = 1500, init?: RequestInit): Promise<void> {
-  await fetchChecked(url, timeoutMs, init);
+export async function fetchOk(
+  url: string,
+  timeoutMs = CDP_HTTP_REQUEST_TIMEOUT_MS,
+  init?: RequestInit,
+): Promise<void> {
+  await fetchCdpChecked(url, timeoutMs, init);
+}
+
+export function openCdpWebSocket(
+  wsUrl: string,
+  opts?: { headers?: Record<string, string>; handshakeTimeoutMs?: number },
+): WebSocket {
+  const headers = getHeadersWithAuth(wsUrl, opts?.headers ?? {});
+  const handshakeTimeoutMs =
+    typeof opts?.handshakeTimeoutMs === "number" && Number.isFinite(opts.handshakeTimeoutMs)
+      ? Math.max(1, Math.floor(opts.handshakeTimeoutMs))
+      : CDP_WS_HANDSHAKE_TIMEOUT_MS;
+  const agent = getDirectAgentForCdp(wsUrl);
+  return new WebSocket(wsUrl, {
+    handshakeTimeout: handshakeTimeoutMs,
+    ...(Object.keys(headers).length ? { headers } : {}),
+    ...(agent ? { agent } : {}),
+  });
 }
 
 export async function withCdpSocket<T>(
@@ -229,15 +185,7 @@ export async function withCdpSocket<T>(
   fn: (send: CdpSendFn) => Promise<T>,
   opts?: { headers?: Record<string, string>; handshakeTimeoutMs?: number },
 ): Promise<T> {
-  const headers = getHeadersWithAuth(wsUrl, opts?.headers ?? {});
-  const handshakeTimeoutMs =
-    typeof opts?.handshakeTimeoutMs === "number" && Number.isFinite(opts.handshakeTimeoutMs)
-      ? Math.max(1, Math.floor(opts.handshakeTimeoutMs))
-      : 5000;
-  const ws = new WebSocket(wsUrl, {
-    handshakeTimeout: handshakeTimeoutMs,
-    ...(Object.keys(headers).length ? { headers } : {}),
-  });
+  const ws = openCdpWebSocket(wsUrl, opts);
   const { send, closeWithError } = createCdpSender(ws);
 
   const openPromise = new Promise<void>((resolve, reject) => {
