@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import type {
   Browser,
   BrowserContext,
@@ -14,7 +12,6 @@ import type { SsrFPolicy } from "../infra/net/ssrf.js";
 import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";
 import { normalizeCdpWsUrl } from "./cdp.js";
 import { getChromeWebSocketUrl } from "./chrome.js";
-import { getDownloadWorkspaceForCdp } from "./download-workspace-registry.js";
 import {
   assertBrowserNavigationAllowed,
   assertBrowserNavigationResultAllowed,
@@ -100,9 +97,6 @@ const contextStates = new WeakMap<BrowserContext, ContextState>();
 const observedContexts = new WeakSet<BrowserContext>();
 const observedPages = new WeakSet<Page>();
 
-/** Maps each Page to the CDP URL it was connected through, for download workspace lookup. */
-const pageCdpUrls = new WeakMap<Page, string>();
-
 // Best-effort cache to make role refs stable even if Playwright returns a different Page object
 // for the same CDP target across requests.
 const roleRefsByTarget = new Map<string, RoleRefsCacheEntry>();
@@ -117,32 +111,6 @@ let connecting: Promise<ConnectedBrowser> | null = null;
 
 function normalizeCdpUrl(raw: string) {
   return raw.replace(/\/$/, "");
-}
-
-/**
- * Sanitise a browser-supplied download filename for safe use on the filesystem.
- * Strips directory separators and control characters, limits length, and
- * appends a timestamp suffix to avoid collisions.
- */
-function sanitizeAutoDownloadFilename(filename: string): string {
-  const trimmed = String(filename ?? "").trim();
-  let base = trimmed ? path.posix.basename(trimmed) : "download";
-  base = path.win32.basename(base);
-  // Strip control characters (C0, DEL)
-  // eslint-disable-next-line no-control-regex
-  base = base.replace(/[\x00-\x1f\x7f]/g, "");
-  // Normalize dots-only or empty names
-  if (!base || base === "." || base === "..") {
-    base = "download";
-  }
-  if (base.length > 180) {
-    base = base.slice(0, 180);
-  }
-  // Append a short timestamp to avoid collision with same-named files.
-  const ts = Date.now();
-  const ext = path.extname(base);
-  const stem = ext ? base.slice(0, base.length - ext.length) : base;
-  return `${stem}-${ts}${ext}`;
 }
 
 function findNetworkRequestById(state: PageState, id: string): BrowserNetworkRequest | undefined {
@@ -313,37 +281,6 @@ export function ensurePageState(page: Page): PageState {
       rec.failureText = req.failure()?.errorText;
       rec.ok = false;
     });
-    // Automatic download capture: save any download to the agent workspace downloads/
-    // folder so the agent can access files without needing to proactively call
-    // `waitfordownload`. Only activates when no explicit download waiter is armed.
-    page.on(
-      "download",
-      (download: { suggestedFilename: () => string; saveAs: (p: string) => Promise<void> }) => {
-        // If an explicit waitfordownload or download command already armed a waiter
-        // (armIdDownload > 0), that listener will capture this event — don't double-save.
-        if (state.armIdDownload > 0) {
-          return;
-        }
-        const cdpUrl = pageCdpUrls.get(page);
-        const workspaceDir = cdpUrl ? getDownloadWorkspaceForCdp(cdpUrl) : null;
-        if (!workspaceDir) {
-          // No workspace registered for this profile — skip auto-save.
-          return;
-        }
-        const filename = download.suggestedFilename();
-        const safe = sanitizeAutoDownloadFilename(filename);
-        const downloadsDir = path.join(workspaceDir, "downloads");
-        const outPath = path.join(downloadsDir, safe);
-        void (async () => {
-          try {
-            await fs.mkdir(downloadsDir, { recursive: true });
-            await download.saveAs(outPath);
-          } catch {
-            // Best-effort; do not surface errors for passive auto-saves.
-          }
-        })();
-      },
-    );
     page.on("close", () => {
       pageStates.delete(page);
       observedPages.delete(page);
@@ -353,24 +290,17 @@ export function ensurePageState(page: Page): PageState {
   return state;
 }
 
-function observeContext(context: BrowserContext, cdpUrl?: string) {
+function observeContext(context: BrowserContext) {
   if (observedContexts.has(context)) {
     return;
   }
   observedContexts.add(context);
   ensureContextState(context);
 
-  const tagPage = (page: Page) => {
-    if (cdpUrl) {
-      pageCdpUrls.set(page, cdpUrl);
-    }
-    ensurePageState(page);
-  };
-
   for (const page of context.pages()) {
-    tagPage(page);
+    ensurePageState(page);
   }
-  context.on("page", tagPage);
+  context.on("page", (page: Page) => ensurePageState(page));
 }
 
 export function ensureContextState(context: BrowserContext): ContextState {
@@ -383,9 +313,9 @@ export function ensureContextState(context: BrowserContext): ContextState {
   return state;
 }
 
-function observeBrowser(browser: Browser, cdpUrl?: string) {
+function observeBrowser(browser: Browser) {
   for (const context of browser.contexts()) {
-    observeContext(context, cdpUrl);
+    observeContext(context);
   }
 }
 
@@ -415,7 +345,7 @@ async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
         const connected: ConnectedBrowser = { browser, cdpUrl: normalized, onDisconnected };
         cached = connected;
         browser.on("disconnected", onDisconnected);
-        observeBrowser(browser, normalized);
+        observeBrowser(browser);
         return connected;
       } catch (err) {
         lastErr = err;

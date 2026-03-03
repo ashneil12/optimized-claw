@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import type { BrowserFormField } from "./client-actions-core.js";
-import { getDownloadWorkspaceForCdp } from "./download-workspace-registry.js";
+import {
+  getDownloadWorkspaceForCdp,
+  sanitizeAutoDownloadFilename,
+} from "./download-workspace-registry.js";
 import { DEFAULT_FILL_FIELD_TYPE } from "./form-fields.js";
 import { DEFAULT_UPLOAD_DIR, resolveStrictExistingPathsWithinRoot } from "./paths.js";
 import {
@@ -15,6 +18,9 @@ import {
 import { normalizeTimeoutMs, requireRef, toAIFriendlyError } from "./pw-tools-core.shared.js";
 
 const log = createSubsystemLogger("browser/auto-download");
+
+/** How long to wait for a download event after each click (ms). */
+const AUTO_DOWNLOAD_WAIT_MS = 3_000;
 
 export async function highlightViaPlaywright(opts: {
   cdpUrl: string;
@@ -55,15 +61,12 @@ export async function clickViaPlaywright(opts: {
   // AND a workspace is registered for this profile.
   const workspaceDir = state.armIdDownload <= 0 ? getDownloadWorkspaceForCdp(opts.cdpUrl) : null;
 
-  // Set up the download race BEFORE the click so we catch immediate downloads.
-  // Use Promise.race: download resolves if Chrome fires a download event within 3s,
-  // otherwise the timeout branch resolves to null (not an error).
-  const AUTO_DOWNLOAD_WAIT_MS = 3_000;
+  const AUTO_DL_WAIT = AUTO_DOWNLOAD_WAIT_MS;
   let downloadRace: Promise<unknown> | null = null;
   if (workspaceDir) {
     downloadRace = Promise.race([
-      page.waitForEvent("download", { timeout: AUTO_DOWNLOAD_WAIT_MS }).catch(() => null),
-      new Promise((resolve) => setTimeout(resolve, AUTO_DOWNLOAD_WAIT_MS + 100, null)),
+      page.waitForEvent("download", { timeout: AUTO_DL_WAIT }).catch(() => null),
+      new Promise((resolve) => setTimeout(resolve, AUTO_DL_WAIT + 100, null)),
     ]);
   }
 
@@ -96,11 +99,7 @@ export async function clickViaPlaywright(opts: {
         if (!download?.suggestedFilename || !download?.saveAs) {
           return; // No download fired within the window.
         }
-        const filename = download.suggestedFilename();
-        const ts = Date.now();
-        const ext = path.extname(filename);
-        const stem = ext ? filename.slice(0, filename.length - ext.length) : filename;
-        const safe = `${stem}-${ts}${ext}`;
+        const safe = sanitizeAutoDownloadFilename(download.suggestedFilename());
         const downloadsDir = path.join(workspaceDir, "downloads");
         const outPath = path.join(downloadsDir, safe);
         await fs.mkdir(downloadsDir, { recursive: true });

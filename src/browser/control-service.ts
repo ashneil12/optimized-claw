@@ -93,11 +93,9 @@ export async function stopBrowserControlService(): Promise<void> {
   });
 
   // Clear workspace registry for all profiles.
-  if (current) {
-    for (const profileCfg of Object.values(current.resolved.profiles)) {
-      if (profileCfg.cdpUrl) {
-        setDownloadWorkspaceForCdp(profileCfg.cdpUrl, null);
-      }
+  for (const profileCfg of Object.values(current.resolved.profiles)) {
+    if (profileCfg.cdpUrl) {
+      setDownloadWorkspaceForCdp(profileCfg.cdpUrl, null);
     }
   }
 
