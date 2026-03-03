@@ -22,14 +22,44 @@ const log = createSubsystemLogger("browser/auto-download");
 /** How long to wait for a download event after each click (ms). */
 const AUTO_DOWNLOAD_WAIT_MS = 3_000;
 
+type TargetOpts = {
+  cdpUrl: string;
+  targetId?: string;
+};
+
+async function getRestoredPageForTarget(opts: TargetOpts) {
+  const page = await getPageForTargetId(opts);
+  ensurePageState(page);
+  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  return page;
+}
+
+function resolveInteractionTimeoutMs(timeoutMs?: number): number {
+  return Math.max(500, Math.min(60_000, Math.floor(timeoutMs ?? 8000)));
+}
+
+async function awaitEvalWithAbort<T>(
+  evalPromise: Promise<T>,
+  abortPromise?: Promise<never>,
+): Promise<T> {
+  if (!abortPromise) {
+    return await evalPromise;
+  }
+  try {
+    return await Promise.race([evalPromise, abortPromise]);
+  } catch (err) {
+    // If abort wins the race, evaluate may reject later; avoid unhandled rejections.
+    void evalPromise.catch(() => {});
+    throw err;
+  }
+}
+
 export async function highlightViaPlaywright(opts: {
   cdpUrl: string;
   targetId?: string;
   ref: string;
 }): Promise<void> {
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   const ref = requireRef(opts.ref);
   try {
     await refLocator(page, ref).highlight();
@@ -47,15 +77,11 @@ export async function clickViaPlaywright(opts: {
   modifiers?: Array<"Alt" | "Control" | "ControlOrMeta" | "Meta" | "Shift">;
   timeoutMs?: number;
 }): Promise<void> {
-  const page = await getPageForTargetId({
-    cdpUrl: opts.cdpUrl,
-    targetId: opts.targetId,
-  });
+  const page = await getRestoredPageForTarget(opts);
   const state = ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
   const ref = requireRef(opts.ref);
   const locator = refLocator(page, ref);
-  const timeout = Math.max(500, Math.min(60_000, Math.floor(opts.timeoutMs ?? 8000)));
+  const timeout = resolveInteractionTimeoutMs(opts.timeoutMs);
 
   // Only attempt auto-download capture if no explicit waitfordownload waiter is armed
   // AND a workspace is registered for this profile.
@@ -119,12 +145,10 @@ export async function hoverViaPlaywright(opts: {
   timeoutMs?: number;
 }): Promise<void> {
   const ref = requireRef(opts.ref);
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   try {
     await refLocator(page, ref).hover({
-      timeout: Math.max(500, Math.min(60_000, opts.timeoutMs ?? 8000)),
+      timeout: resolveInteractionTimeoutMs(opts.timeoutMs),
     });
   } catch (err) {
     throw toAIFriendlyError(err, ref);
@@ -143,12 +167,10 @@ export async function dragViaPlaywright(opts: {
   if (!startRef || !endRef) {
     throw new Error("startRef and endRef are required");
   }
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   try {
     await refLocator(page, startRef).dragTo(refLocator(page, endRef), {
-      timeout: Math.max(500, Math.min(60_000, opts.timeoutMs ?? 8000)),
+      timeout: resolveInteractionTimeoutMs(opts.timeoutMs),
     });
   } catch (err) {
     throw toAIFriendlyError(err, `${startRef} -> ${endRef}`);
@@ -166,12 +188,10 @@ export async function selectOptionViaPlaywright(opts: {
   if (!opts.values?.length) {
     throw new Error("values are required");
   }
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   try {
     await refLocator(page, ref).selectOption(opts.values, {
-      timeout: Math.max(500, Math.min(60_000, opts.timeoutMs ?? 8000)),
+      timeout: resolveInteractionTimeoutMs(opts.timeoutMs),
     });
   } catch (err) {
     throw toAIFriendlyError(err, ref);
@@ -205,12 +225,10 @@ export async function typeViaPlaywright(opts: {
   timeoutMs?: number;
 }): Promise<void> {
   const text = String(opts.text ?? "");
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   const ref = requireRef(opts.ref);
   const locator = refLocator(page, ref);
-  const timeout = Math.max(500, Math.min(60_000, opts.timeoutMs ?? 8000));
+  const timeout = resolveInteractionTimeoutMs(opts.timeoutMs);
   try {
     if (opts.slowly) {
       await locator.click({ timeout });
@@ -232,10 +250,8 @@ export async function fillFormViaPlaywright(opts: {
   fields: BrowserFormField[];
   timeoutMs?: number;
 }): Promise<void> {
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
-  const timeout = Math.max(500, Math.min(60_000, opts.timeoutMs ?? 8000));
+  const page = await getRestoredPageForTarget(opts);
+  const timeout = resolveInteractionTimeoutMs(opts.timeoutMs);
   for (const field of opts.fields) {
     const ref = field.ref.trim();
     const type = (field.type || DEFAULT_FILL_FIELD_TYPE).trim() || DEFAULT_FILL_FIELD_TYPE;
@@ -280,9 +296,7 @@ export async function evaluateViaPlaywright(opts: {
   if (!fnText) {
     throw new Error("function is required");
   }
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   // Clamp evaluate timeout to prevent permanently blocking Playwright's command queue.
   // Without this, a long-running async evaluate blocks all subsequent page operations
   // because Playwright serializes CDP commands per page.
@@ -362,17 +376,7 @@ export async function evaluateViaPlaywright(opts: {
         fnBody: fnText,
         timeoutMs: evaluateTimeout,
       });
-      if (!abortPromise) {
-        return await evalPromise;
-      }
-      try {
-        return await Promise.race([evalPromise, abortPromise]);
-      } catch (err) {
-        // If abort wins the race, the underlying evaluate may reject later; ensure we don't
-        // surface it as an unhandled rejection.
-        void evalPromise.catch(() => {});
-        throw err;
-      }
+      return await awaitEvalWithAbort(evalPromise, abortPromise);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-implied-eval -- required for browser-context eval
@@ -402,15 +406,7 @@ export async function evaluateViaPlaywright(opts: {
       fnBody: fnText,
       timeoutMs: evaluateTimeout,
     });
-    if (!abortPromise) {
-      return await evalPromise;
-    }
-    try {
-      return await Promise.race([evalPromise, abortPromise]);
-    } catch (err) {
-      void evalPromise.catch(() => {});
-      throw err;
-    }
+    return await awaitEvalWithAbort(evalPromise, abortPromise);
   } finally {
     if (signal && abortListener) {
       signal.removeEventListener("abort", abortListener);
@@ -424,9 +420,7 @@ export async function scrollIntoViewViaPlaywright(opts: {
   ref: string;
   timeoutMs?: number;
 }): Promise<void> {
-  const page = await getPageForTargetId(opts);
-  ensurePageState(page);
-  restoreRoleRefsForTarget({ cdpUrl: opts.cdpUrl, targetId: opts.targetId, page });
+  const page = await getRestoredPageForTarget(opts);
   const timeout = normalizeTimeoutMs(opts.timeoutMs, 20_000);
 
   const ref = requireRef(opts.ref);
