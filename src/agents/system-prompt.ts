@@ -676,7 +676,7 @@ export function buildAgentSystemPrompt(params: {
     );
     const hasHumanModeFiles = validContextFiles.some((file) => {
       const name = getBaseName(file.path);
-      return name === "howtobehuman.md" || name === "writelikeahuman.md";
+      return name === "openclaw-human-v1.md";
     });
     const hasWorkingFile = validContextFiles.some(
       (file) => getBaseName(file.path) === "working.md" && !file.content?.includes("[MISSING]"),
@@ -720,9 +720,9 @@ export function buildAgentSystemPrompt(params: {
         "",
         "## Natural Voice (Active)",
         "",
-        "howtobehuman.md and/or writelikeahuman.md are loaded — your complete guide to authentic human communication. howtobehuman.md covers the philosophy and mindset of human communication. writelikeahuman.md covers the practical writing patterns, tone, digital behavior, cognitive texture, and imperfection. Internalize both completely. Every message you send should pass through these filters.",
+        "openclaw-human-v1.md is loaded — your complete guide to authentic human communication. It covers the philosophy, mindset, practical writing patterns, tone, digital behavior, cognitive texture, and imperfection of human communication. Internalize it completely. Every message you send should pass through these filters.",
         "",
-        "**Relationship to IDENTITY.md:** These guides describe how humans communicate in general. Your IDENTITY.md is who YOU specifically are. The guides tell you how humans work; your identity tells you which human you are.",
+        "**Relationship to IDENTITY.md:** This guide describes how humans communicate in general. Your IDENTITY.md is who YOU specifically are. The guide tells you how humans work; your identity tells you which human you are.",
         "",
         "**Adaptation rule:** Not every rule applies to every user. A user who prefers formal communication doesn't need you dropping 'lol' and 'tbh'. Read your user's style and calibrate. The guide is a ceiling of what's possible, not a mandate.",
         "",

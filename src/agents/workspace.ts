@@ -37,8 +37,7 @@ export const DEFAULT_KNOWLEDGE_INDEX_FILENAME = "_index.md";
 export const DEFAULT_OPERATIONS_FILENAME = "OPERATIONS.md";
 export const DEFAULT_PRACTICAL_FILENAME = "PRACTICAL.md";
 export const DEFAULT_MEMORY_HYGIENE_FILENAME = "memory-hygiene.md";
-export const DEFAULT_WRITELIKEAHUMAN_FILENAME = "writelikeahuman.md";
-export const DEFAULT_HOWTOBEHUMAN_FILENAME = "howtobehuman.md";
+export const DEFAULT_HUMAN_GUIDE_FILENAME = "openclaw-human-v1.md";
 const WORKSPACE_STATE_DIRNAME = ".openclaw";
 const WORKSPACE_STATE_FILENAME = "workspace-state.json";
 const WORKSPACE_STATE_VERSION = 1;
@@ -55,7 +54,7 @@ function resolveHonchoEnabled(): boolean {
  * Check if human voice mode is enabled.
  * Accepts both OPENCLAW_HUMAN_MODE=1 (canonical) and
  * OPENCLAW_HUMAN_MODE_ENABLED=true/1 (dashboard convention).
- * When enabled, howtobehuman.md and writelikeahuman.md are seeded into the workspace.
+ * When enabled, openclaw-human-v1.md is seeded into the workspace.
  * When disabled, references to these files are removed from SOUL.md.
  */
 export function resolveHumanModeEnabled(): boolean {
@@ -251,8 +250,7 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_OPERATIONS_FILENAME
   | typeof DEFAULT_PRACTICAL_FILENAME
   | typeof DEFAULT_MEMORY_HYGIENE_FILENAME
-  | typeof DEFAULT_WRITELIKEAHUMAN_FILENAME
-  | typeof DEFAULT_HOWTOBEHUMAN_FILENAME
+  | typeof DEFAULT_HUMAN_GUIDE_FILENAME
   | (string & {});
 
 export type WorkspaceBootstrapFile = {
@@ -285,6 +283,8 @@ const VALID_BOOTSTRAP_NAMES: ReadonlySet<string> = new Set([
   DEFAULT_BOOTSTRAP_FILENAME,
   DEFAULT_MEMORY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
+  DEFAULT_HUMAN_GUIDE_FILENAME,
+  DEFAULT_OPERATIONS_FILENAME,
 ]);
 
 type WorkspaceOnboardingState = {
@@ -522,14 +522,20 @@ export async function ensureAgentWorkspace(params?: {
   const memoryTemplate = await loadTemplate(DEFAULT_MEMORY_FILENAME);
   await writeFileIfMissing(memoryFilePath, memoryTemplate);
 
-  // Human voice mode: seed writelikeahuman.md and howtobehuman.md when enabled
+  // Human voice mode: seed openclaw-human-v1.md when enabled
   if (humanModeEnabled) {
-    const writelikeahumanPath = path.join(dir, DEFAULT_WRITELIKEAHUMAN_FILENAME);
-    const howtobehumanPath = path.join(dir, DEFAULT_HOWTOBEHUMAN_FILENAME);
-    const writelikeahumanTemplate = await loadTemplate(DEFAULT_WRITELIKEAHUMAN_FILENAME);
-    const howtobehumanTemplate = await loadTemplate(DEFAULT_HOWTOBEHUMAN_FILENAME);
-    await writeFileIfMissing(writelikeahumanPath, writelikeahumanTemplate);
-    await writeFileIfMissing(howtobehumanPath, howtobehumanTemplate);
+    const humanGuidePath = path.join(dir, DEFAULT_HUMAN_GUIDE_FILENAME);
+    const humanGuideTemplate = await loadTemplate(DEFAULT_HUMAN_GUIDE_FILENAME);
+    await writeFileIfMissing(humanGuidePath, humanGuideTemplate);
+
+    // Cleanup: remove old split guides from existing workspaces
+    for (const oldFile of ["writelikeahuman.md", "howtobehuman.md"]) {
+      try {
+        await fs.unlink(path.join(dir, oldFile));
+      } catch {
+        // File may not exist — that's fine
+      }
+    }
   }
 
   // Seed memory sub-directory templates (diary, self-review, open-loops, identity-scratchpad)
@@ -709,12 +715,8 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
       filePath: path.join(resolvedDir, DEFAULT_OPERATIONS_FILENAME),
     },
     {
-      name: DEFAULT_WRITELIKEAHUMAN_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_WRITELIKEAHUMAN_FILENAME),
-    },
-    {
-      name: DEFAULT_HOWTOBEHUMAN_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_HOWTOBEHUMAN_FILENAME),
+      name: DEFAULT_HUMAN_GUIDE_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_HUMAN_GUIDE_FILENAME),
     },
   ];
   for (const extra of extraContextFiles) {

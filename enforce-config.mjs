@@ -662,8 +662,8 @@ function enforceCore(configPath) {
       "Before context compaction, update WORKING.md with current task state and write any lasting notes to memory/YYYY-MM-DD.md. Reply with NO_REPLY if nothing to store.",
   };
 
-  // Bootstrap: increase per-file char limit so SOUL.md (~25K), writelikeahuman.md (~34K),
-  // and howtobehuman.md (~32K) are injected in full. Total budget (150K) accommodates this.
+  // Bootstrap: increase per-file char limit so SOUL.md (~25K) and
+  // openclaw-human-v1.md (~16K) are injected in full. Total budget (150K) accommodates this.
   defaults.bootstrapMaxChars = 50_000;
 
   // Context pruning
@@ -982,7 +982,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
           "Before finishing, quickly check if there are any last insights from the archived diary",
           "worth promoting:",
           "- IDENTITY.md: persistent patterns not yet codified?",
-          "- writelikeahuman.md: communication insights worth adding?",
+          "- openclaw-human-v1.md: communication insights worth adding?",
           "- self-review.md: MISS patterns approaching promotion threshold?",
           "",
           "Only promote if genuinely warranted. Don't force updates.",
@@ -1146,7 +1146,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
           "✗ Uncertain/ambiguous pattern",
           "✗ Contradictory evidence in diary",
           "",
-          "✍️ HUMANIZATION CHECK (if writelikeahuman.md is enabled)",
+          "✍️ HUMANIZATION CHECK (if openclaw-human-v1.md is enabled)",
           "- Did recent interactions reveal new AI tells to add?",
           "- Are you still falling into patterns that should be banned?",
           "- Any rules that consistently don't apply to YOUR user? (note it)",
@@ -1209,7 +1209,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
           "5. MEMORY.md (full read)",
           "6. memory/open-loops.md (pending follow-ups)",
           "7. memory/knowledge/ (scan topics)",
-          "8. writelikeahuman.md (if enabled — communication guide)",
+          "8. openclaw-human-v1.md (if enabled — communication guide)",
           "9. memory-hygiene.md (refresh the hygiene principles — this is your guide)",
           "",
           "PHASE 2: CRITICAL RULE PROMOTION (MANDATORY)",

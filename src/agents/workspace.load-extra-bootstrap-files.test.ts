@@ -29,29 +29,29 @@ describe("loadExtraBootstrapFiles", () => {
     const packageDir = path.join(workspaceDir, "packages", "core");
     await fs.mkdir(packageDir, { recursive: true });
     await fs.writeFile(path.join(packageDir, "TOOLS.md"), "tools", "utf-8");
-    await fs.writeFile(path.join(packageDir, "README.md"), "readme", "utf-8");
+    await fs.writeFile(path.join(packageDir, "IDENTITY.md"), "identity", "utf-8");
 
     const files = await loadExtraBootstrapFiles(workspaceDir, ["packages/*/*"]);
 
     expect(files).toHaveLength(2);
     expect(files.some((f) => f.name === "TOOLS.md" && f.content === "tools")).toBe(true);
-    expect(files.some((f) => f.name === "README.md" && f.content === "readme")).toBe(true);
+    expect(files.some((f) => f.name === "IDENTITY.md" && f.content === "identity")).toBe(true);
   });
 
-  it("loads arbitrary-named extra files like writelikeahuman.md", async () => {
+  it("loads arbitrary-named extra files like openclaw-human-v1.md", async () => {
     const workspaceDir = await createWorkspaceDir("arbitrary");
-    await fs.writeFile(path.join(workspaceDir, "writelikeahuman.md"), "voice guide", "utf-8");
+    await fs.writeFile(path.join(workspaceDir, "openclaw-human-v1.md"), "voice guide", "utf-8");
     await fs.writeFile(path.join(workspaceDir, "OPERATIONS.md"), "ops guide", "utf-8");
 
     const files = await loadExtraBootstrapFiles(workspaceDir, [
-      "writelikeahuman.md",
+      "openclaw-human-v1.md",
       "OPERATIONS.md",
     ]);
 
     expect(files).toHaveLength(2);
-    expect(files.some((f) => f.name === "writelikeahuman.md" && f.content === "voice guide")).toBe(
-      true,
-    );
+    expect(
+      files.some((f) => f.name === "openclaw-human-v1.md" && f.content === "voice guide"),
+    ).toBe(true);
     expect(files.some((f) => f.name === "OPERATIONS.md" && f.content === "ops guide")).toBe(true);
   });
 
