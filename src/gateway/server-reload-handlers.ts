@@ -75,6 +75,7 @@ export function createGatewayReloadHandlers(params: {
       state.cronState.cron.stop();
       state.cronState.stopPreResetFlush();
       state.cronState.stopDiaryArchive();
+      state.cronState.stopTranscriptSweep();
       nextState.cronState = buildGatewayCronService({
         cfg: nextConfig,
         deps: params.deps,

@@ -20,6 +20,7 @@ import {
 } from "../cron/run-log.js";
 import { CronService } from "../cron/service.js";
 import { resolveCronStorePath } from "../cron/store.js";
+import { startTranscriptSweepTimer, stopTranscriptSweepTimer } from "../cron/transcript-sweep.js";
 import { normalizeHttpWebhookUrl } from "../cron/webhook-url.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { runHeartbeatOnce } from "../infra/heartbeat-runner.js";
@@ -40,6 +41,7 @@ export type GatewayCronState = {
   cronEnabled: boolean;
   stopPreResetFlush: () => void;
   stopDiaryArchive: () => void;
+  stopTranscriptSweep: () => void;
 };
 
 const CRON_WEBHOOK_TIMEOUT_MS = 10_000;
@@ -530,6 +532,7 @@ export function buildGatewayCronService(params: {
   });
 
   startDiaryArchiveTimer({ cfg: params.cfg });
+  startTranscriptSweepTimer({ cfg: params.cfg });
   // Security audit scheduler disabled — produces false positives on SaaS/Docker deployments
   // startSecurityAuditScheduler({ cfg: params.cfg, deps: params.deps });
 
@@ -539,5 +542,6 @@ export function buildGatewayCronService(params: {
     cronEnabled,
     stopPreResetFlush: stopPreResetFlushTimer,
     stopDiaryArchive: stopDiaryArchiveTimer,
+    stopTranscriptSweep: stopTranscriptSweepTimer,
   };
 }
