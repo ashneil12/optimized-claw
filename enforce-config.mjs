@@ -623,6 +623,11 @@ function enforceCore(configPath) {
   ensure(config, "logging");
   config.logging.redactSensitive = "tools";
 
+  // Plugins — explicitly trust our non-bundled plugins so the loader
+  // doesn't warn about auto-loading unknown extensions.
+  const plugins = ensure(config, "plugins");
+  plugins.allow = ["openclaw-honcho"];
+
   // Gateway UI / bind / port
   const gateway = ensure(config, "gateway");
   gateway.port = Number(env("GATEWAY_PORT", "3000"));

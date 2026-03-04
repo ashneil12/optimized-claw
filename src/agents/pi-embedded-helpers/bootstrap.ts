@@ -268,7 +268,13 @@ export function buildBootstrapContextFiles(
     if (!contentWithinBudget) {
       continue;
     }
-    if (trimmed.truncated || contentWithinBudget.length < trimmed.content.length) {
+    // Only warn for files without a known built-in per-file cap; diary/WORKING/open-loops/knowledge-index
+    // truncation is by design and the warning is just noise for those.
+    const hasBuiltInCap = isDiary || isWorking || isOpenLoops || isKnowledgeIndex;
+    if (
+      !hasBuiltInCap &&
+      (trimmed.truncated || contentWithinBudget.length < trimmed.content.length)
+    ) {
       opts?.warn?.(
         `workspace bootstrap file ${file.name} is ${trimmed.originalLength} chars (limit ${trimmed.maxChars}); truncating in injected context`,
       );
