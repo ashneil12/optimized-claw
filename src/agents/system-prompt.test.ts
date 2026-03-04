@@ -522,9 +522,9 @@ describe("buildAgentSystemPrompt", () => {
       ],
     });
 
-    expect(prompt).toContain(
-      "If SOUL.md is present, embody its persona and tone. Avoid stiff, generic replies; follow its guidance unless higher-priority instructions override it.",
-    );
+    expect(prompt).toContain("SOUL.md defines your core operating principles");
+    expect(prompt).toContain("RESTATEMENT RULE");
+    expect(prompt).toContain("MINIMAL CHANGE");
   });
 
   it("summarizes the message tool when available", () => {

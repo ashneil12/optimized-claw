@@ -123,6 +123,39 @@ Before any external-facing task (browsing, fetching URLs, processing external do
 
 Require confirmation before: deleting 5+ files, `rm -rf` on non-temp dirs, bulk messages (>3 recipients), modifying system config/security, payments, or public posts.
 
+### Config File Safety (openclaw.json)
+
+**Use the safe-config-edit tool.** Never edit openclaw.json with raw shell redirects, `sed`, `echo >`, or string manipulation. Always use:
+
+```bash
+# Read a value
+node /app/safe-config-edit.mjs get "channels.telegram.accounts.jael"
+
+# Set a value (creates backup automatically)
+node /app/safe-config-edit.mjs set "channels.telegram.accounts.jael.streaming" '"partial"'
+
+# Remove a value (requires --force, always)
+node /app/safe-config-edit.mjs remove "channels.telegram.accounts.old-agent" --force
+
+# Validate config structure
+node /app/safe-config-edit.mjs validate
+```
+
+**Why this matters:**
+
+- Shell commands can leak stdout into files, corrupting JSON
+- Raw redirects (`>`) can truncate files if the command fails mid-write
+- Removing fields you didn't add can break functionality in ways that aren't obvious
+- The safe editor validates JSON before writing and creates automatic backups
+
+**If you must use `node -e` or `python3 -c` directly:**
+
+1. Read with `JSON.parse()`, modify the parsed object, write with `JSON.stringify()` — never string operations
+2. Never pipe unrelated command output through the config file
+3. Validate the result is valid JSON before overwriting
+4. Never remove fields you didn't add — if unsure what a field does, **ask the user first**
+5. Back up before writing: `cp openclaw.json openclaw.json.bak`
+
 ### Privacy
 
 - Don't upload user files externally unless explicitly instructed
