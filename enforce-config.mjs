@@ -104,32 +104,10 @@ function isTruthy(value) {
  * Only the model portion (after the provider/ prefix) is matched.
  */
 const CANONICAL_MODEL_IDS = {
-  // MiniMax
+  // MiniMax (only entries where casing actually differs)
   "minimax-m2.5": "MiniMax-M2.5",
   "minimax-m2.5-lightning": "MiniMax-M2.5-Lightning",
   "minimax-m1": "MiniMax-M1",
-  // DeepSeek
-  "deepseek-chat": "deepseek-chat",
-  "deepseek-reasoner": "deepseek-reasoner",
-  // OpenAI
-  "gpt-4o": "gpt-4o",
-  "gpt-4o-mini": "gpt-4o-mini",
-  "gpt-4.1": "gpt-4.1",
-  "o3-mini": "o3-mini",
-  // Anthropic
-  "claude-sonnet-4-20250514": "claude-sonnet-4-20250514",
-  "claude-3.5-sonnet": "claude-3.5-sonnet",
-  // Google
-  "gemini-2.0-flash": "gemini-2.0-flash",
-  "gemini-2.5-pro": "gemini-2.5-pro",
-  // Bailian (Alibaba Cloud Coding Plan)
-  "glm-5": "glm-5",
-  "glm-4.7": "glm-4.7",
-  "kimi-k2.5": "kimi-k2.5",
-  "qwen3.5-plus": "qwen3.5-plus",
-  "qwen3-max-2026-01-23": "qwen3-max-2026-01-23",
-  "qwen3-coder-next": "qwen3-coder-next",
-  "qwen3-coder-plus": "qwen3-coder-plus",
 };
 
 /**
@@ -445,6 +423,78 @@ function enforceMemory(configPath) {
   console.log("[enforce-config] ✅ Memory settings enforced");
 }
 
+/**
+ * Auto-derive elevated tool allowFrom lists from channel config and credential stores.
+ * Any user authorized for DM access on a channel is also authorized for elevated tools.
+ * Merges with (never overwrites) existing tools.elevated.allowFrom entries.
+ */
+function deriveElevatedToolUsers(config, tools) {
+  const dataDir = env("OPENCLAW_DATA_DIR", "/home/node/data");
+  const channels = config.channels || {};
+  const perChannel = {}; // { channelName: Set<string> }
+
+  // 1. Collect from channel config allowFrom entries (per-account and top-level)
+  for (const [channelName, channelCfg] of Object.entries(channels)) {
+    const ids = (perChannel[channelName] = perChannel[channelName] || new Set());
+    for (const id of channelCfg.allowFrom || []) {
+      if (id !== "*") {
+        ids.add(String(id));
+      }
+    }
+    const accounts = channelCfg.accounts || {};
+    for (const account of Object.values(accounts)) {
+      for (const id of account.allowFrom || []) {
+        if (id !== "*") {
+          ids.add(String(id));
+        }
+      }
+    }
+  }
+
+  // 2. Collect from credential store files (<channel>-*-allowFrom.json)
+  try {
+    const credDir = `${dataDir}/credentials`;
+    if (existsSync(credDir)) {
+      for (const file of readdirSync(credDir)) {
+        if (!file.endsWith("-allowFrom.json")) {
+          continue;
+        }
+        const channelName = file.split("-")[0];
+        if (!channelName) {
+          continue;
+        }
+        try {
+          const store = readConfig(`${credDir}/${file}`);
+          const ids = (perChannel[channelName] = perChannel[channelName] || new Set());
+          for (const id of store.allowFrom || []) {
+            if (id !== "*") {
+              ids.add(String(id));
+            }
+          }
+        } catch {
+          // skip unreadable files
+        }
+      }
+    }
+  } catch {
+    // credentials dir may not exist yet
+  }
+
+  // 3. Merge into tools.elevated.allowFrom.<channel>
+  for (const [channelName, ids] of Object.entries(perChannel)) {
+    if (ids.size === 0) {
+      continue;
+    }
+    const elevated = ensure(tools, "elevated");
+    const allowFrom = ensure(elevated, "allowFrom");
+    const existing = new Set((allowFrom[channelName] || []).map(String));
+    for (const id of ids) {
+      existing.add(id);
+    }
+    allowFrom[channelName] = [...existing];
+  }
+}
+
 function enforceCore(configPath) {
   const config = readConfig(configPath);
 
@@ -511,79 +561,7 @@ function enforceCore(configPath) {
     tools.loopDetection.enabled = true;
   }
 
-  // Elevated tools — auto-derive allowFrom for each channel from existing paired
-  // user IDs. Any user authorized for DM access on a channel should also be able
-  // to use elevated tools (file access, exec, etc.) without separate config.
-  {
-    const dataDir = env("OPENCLAW_DATA_DIR", "/home/node/data");
-    const channels = config.channels || {};
-    const perChannel = {}; // { channelName: Set<string> }
-
-    // 1. Collect from channel config allowFrom entries (per-account and top-level)
-    for (const [channelName, channelCfg] of Object.entries(channels)) {
-      const ids = (perChannel[channelName] = perChannel[channelName] || new Set());
-      // Top-level allowFrom
-      for (const id of channelCfg.allowFrom || []) {
-        if (id !== "*") {
-          ids.add(String(id));
-        }
-      }
-      // Per-account allowFrom
-      const accounts = channelCfg.accounts || {};
-      for (const account of Object.values(accounts)) {
-        for (const id of account.allowFrom || []) {
-          if (id !== "*") {
-            ids.add(String(id));
-          }
-        }
-      }
-    }
-
-    // 2. Collect from credential store files (<channel>-*-allowFrom.json)
-    try {
-      const credDir = `${dataDir}/credentials`;
-      if (existsSync(credDir)) {
-        for (const file of readdirSync(credDir)) {
-          if (!file.endsWith("-allowFrom.json")) {
-            continue;
-          }
-          // Extract channel name: "telegram-mm-ezra-allowFrom.json" → "telegram"
-          const channelName = file.split("-")[0];
-          if (!channelName) {
-            continue;
-          }
-          try {
-            const store = readConfig(`${credDir}/${file}`);
-            const ids = (perChannel[channelName] = perChannel[channelName] || new Set());
-            for (const id of store.allowFrom || []) {
-              if (id !== "*") {
-                ids.add(String(id));
-              }
-            }
-          } catch {
-            // skip unreadable files
-          }
-        }
-      }
-    } catch {
-      // credentials dir may not exist yet
-    }
-
-    // 3. Merge into tools.elevated.allowFrom.<channel>
-    for (const [channelName, ids] of Object.entries(perChannel)) {
-      if (ids.size === 0) {
-        continue;
-      }
-      const elevated = ensure(tools, "elevated");
-      const allowFrom = ensure(elevated, "allowFrom");
-      // Merge with any existing entries rather than overwriting
-      const existing = new Set((allowFrom[channelName] || []).map(String));
-      for (const id of ids) {
-        existing.add(id);
-      }
-      allowFrom[channelName] = [...existing];
-    }
-  }
+  deriveElevatedToolUsers(config, tools);
 
   // Workspace
   defaults.workspace = env("OPENCLAW_WORKSPACE_DIR", "/home/node/workspace");
@@ -654,6 +632,29 @@ function enforceCore(configPath) {
 
   writeConfig(configPath, config);
   console.log("[enforce-config] ✅ Core runtime settings enforced");
+}
+
+/**
+ * Build announce delivery config for cron jobs that should send results to a
+ * chat channel. Uses OPENCLAW_CRON_ANNOUNCE_CHANNEL and OPENCLAW_CRON_ANNOUNCE_TO
+ * env vars when set, allowing explicit Telegram/Discord routing without relying
+ * on session-derived fallback (which fails for isolated cron sessions with no
+ * prior inbound context).
+ *
+ * When env vars are unset the delivery is `{ mode: "announce" }` — the scheduler
+ * will fall back to the agent's last-known channel from its session store.
+ */
+function buildAnnounceDelivery() {
+  const channel = env("OPENCLAW_CRON_ANNOUNCE_CHANNEL", "").trim();
+  const to = env("OPENCLAW_CRON_ANNOUNCE_TO", "").trim();
+  const delivery = { mode: "announce" };
+  if (channel) {
+    delivery.channel = channel;
+  }
+  if (to) {
+    delivery.to = to;
+  }
+  return delivery;
 }
 
 /** Job names that should ONLY run on the main agent (not sub-agents). */
@@ -1303,7 +1304,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
         ].join("\n"),
         model: "{{PRIMARY_MODEL}}",
       },
-      delivery: { mode: "announce" },
+      delivery: buildAnnounceDelivery(),
       state: {},
     },
     {
@@ -1388,7 +1389,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
         ].join("\n"),
         model: "{{PRIMARY_MODEL}}",
       },
-      delivery: { mode: "announce" },
+      delivery: buildAnnounceDelivery(),
       state: {},
     },
     {
@@ -1798,6 +1799,50 @@ function ensureAgentBrowserContainers(configPath) {
 
 // ── Honcho Fork Enforcement ─────────────────────────────────────────────────
 
+/** Canonical openclaw.plugin.json manifest for the Honcho plugin. */
+const HONCHO_PLUGIN_MANIFEST = {
+  id: "openclaw-honcho",
+  kind: "memory",
+  uiHints: {
+    apiKey: {
+      label: "Honcho API Key",
+      sensitive: true,
+      placeholder: "hch-v3-...",
+      help: "API key for Honcho memory service",
+    },
+    baseUrl: {
+      label: "Base URL",
+      placeholder: "https://api.honcho.dev",
+      help: "Honcho API base URL",
+      advanced: true,
+    },
+    workspaceId: {
+      label: "Workspace ID",
+      placeholder: "openclaw",
+      help: "Honcho workspace/app identifier",
+      advanced: true,
+    },
+  },
+  configSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      apiKey: { type: "string" },
+      baseUrl: { type: "string" },
+      workspaceId: { type: "string" },
+    },
+  },
+};
+
+/** Write the Honcho plugin manifest if it doesn't exist. */
+function ensureHonchoManifest(pluginDir) {
+  const manifestPath = `${pluginDir}/openclaw.plugin.json`;
+  if (!existsSync(manifestPath)) {
+    console.log("[enforce-config] Generating missing openclaw.plugin.json for honcho plugin...");
+    writeFileSync(manifestPath, JSON.stringify(HONCHO_PLUGIN_MANIFEST, null, 2) + "\n");
+  }
+}
+
 /**
  * Ensure the Honcho plugin is installed from our fork (github:ashneil12/openclaw-honcho-multiagent)
  * rather than the vanilla npm version. Checks for the `unwrapMessage` marker in helpers.js
@@ -1828,55 +1873,8 @@ function enforceHonchoFork() {
   try {
     const helpers = readFileSync(helpersPath, "utf8");
     if (helpers.includes("unwrapMessage")) {
-      // Patched fork is already installed — but ensure manifest exists.
-      // The fork repo may have been cloned without openclaw.plugin.json,
-      // which causes OpenClaw's config validator to reject the plugin.
-      const manifestPath = `${pluginDir}/openclaw.plugin.json`;
-      if (!existsSync(manifestPath)) {
-        console.log(
-          "[enforce-config] Generating missing openclaw.plugin.json for existing honcho fork...",
-        );
-        writeFileSync(
-          manifestPath,
-          JSON.stringify(
-            {
-              id: "openclaw-honcho",
-              kind: "memory",
-              uiHints: {
-                apiKey: {
-                  label: "Honcho API Key",
-                  sensitive: true,
-                  placeholder: "hch-v3-...",
-                  help: "API key for Honcho memory service",
-                },
-                baseUrl: {
-                  label: "Base URL",
-                  placeholder: "https://api.honcho.dev",
-                  help: "Honcho API base URL",
-                  advanced: true,
-                },
-                workspaceId: {
-                  label: "Workspace ID",
-                  placeholder: "openclaw",
-                  help: "Honcho workspace/app identifier",
-                  advanced: true,
-                },
-              },
-              configSchema: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  apiKey: { type: "string" },
-                  baseUrl: { type: "string" },
-                  workspaceId: { type: "string" },
-                },
-              },
-            },
-            null,
-            2,
-          ) + "\n",
-        );
-      }
+      // Patched fork is already installed — ensure manifest exists.
+      ensureHonchoManifest(pluginDir);
       return;
     }
 
@@ -1908,54 +1906,8 @@ function enforceHonchoFork() {
 
       console.log("[enforce-config] ✅ Honcho fork installed successfully");
 
-      // Guard: generate openclaw.plugin.json if the fork repo doesn't include it.
-      // Without this manifest, OpenClaw's config validator rejects the plugin.
-      const manifestPath = `${pluginDir}/openclaw.plugin.json`;
-      if (!existsSync(manifestPath)) {
-        console.log(
-          "[enforce-config] Generating missing openclaw.plugin.json for honcho plugin...",
-        );
-        writeFileSync(
-          manifestPath,
-          JSON.stringify(
-            {
-              id: "openclaw-honcho",
-              kind: "memory",
-              uiHints: {
-                apiKey: {
-                  label: "Honcho API Key",
-                  sensitive: true,
-                  placeholder: "hch-v3-...",
-                  help: "API key for Honcho memory service",
-                },
-                baseUrl: {
-                  label: "Base URL",
-                  placeholder: "https://api.honcho.dev",
-                  help: "Honcho API base URL",
-                  advanced: true,
-                },
-                workspaceId: {
-                  label: "Workspace ID",
-                  placeholder: "openclaw",
-                  help: "Honcho workspace/app identifier",
-                  advanced: true,
-                },
-              },
-              configSchema: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  apiKey: { type: "string" },
-                  baseUrl: { type: "string" },
-                  workspaceId: { type: "string" },
-                },
-              },
-            },
-            null,
-            2,
-          ) + "\n",
-        );
-      }
+      // Ensure the manifest exists (OpenClaw's config validator requires it).
+      ensureHonchoManifest(pluginDir);
     } finally {
       try {
         execSync(`rm -rf "${tmpDir}"`, { encoding: "utf8", timeout: 10_000 });

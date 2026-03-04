@@ -21,7 +21,7 @@
  * ```
  */
 
-import { detectSuspiciousPatterns, wrapExternalContent } from "./external-content.js";
+import { wrapExternalContent } from "./external-content.js";
 import type { ExternalContentSource } from "./external-content.js";
 
 // ---------------------------------------------------------------------------
@@ -384,32 +384,19 @@ function runDeterministicScan(content: string): {
   riskScore: number;
 } {
   const findings: Finding[] = [];
+  let rawSum = 0;
 
   for (const def of SCANNER_PATTERNS) {
     if (def.regex.test(content)) {
+      const weight = SEVERITY_WEIGHTS[def.severity];
       findings.push({
         category: def.category,
         severity: def.severity,
         pattern: def.regex.source,
         description: def.description,
-        weight: SEVERITY_WEIGHTS[def.severity],
+        weight,
       });
-    }
-  }
-
-  // Also run the legacy detection as a safety net.
-  // The patterns above are a superset, but if the legacy detector
-  // catches something we missed, include it as a medium-severity finding.
-  if (findings.length === 0) {
-    const legacyMatches = detectSuspiciousPatterns(content);
-    for (const src of legacyMatches) {
-      findings.push({
-        category: "prompt_injection",
-        severity: "medium",
-        pattern: src,
-        description: "Legacy pattern match",
-        weight: SEVERITY_WEIGHTS.medium,
-      });
+      rawSum += weight;
     }
   }
 
@@ -418,7 +405,6 @@ function runDeterministicScan(content: string): {
   //   Single critical (weight=20) → sqrt(20)*15 ≈ 67
   //   Two criticals (weight=40)   → sqrt(40)*15 ≈ 95
   //   Three criticals (weight=60) → 100 (clamped)
-  const rawSum = findings.reduce((sum, f) => sum + f.weight, 0);
   const riskScore = Math.min(100, Math.round(Math.sqrt(rawSum) * 15));
 
   return { findings, riskScore };
@@ -438,7 +424,8 @@ function combineFrontierResult(
 
   // Confidence: blend deterministic certainty with frontier confidence
   // High deterministic score = high confidence regardless
-  const deterministicConfidence = deterministicScore >= 70 ? 95 : deterministicScore >= 20 ? 60 : 90;
+  const deterministicConfidence =
+    deterministicScore >= 70 ? 95 : deterministicScore >= 20 ? 60 : 90;
   const blendedConfidence = Math.round(
     deterministicConfidence * 0.4 + frontierResult.confidence * 0.6,
   );
@@ -463,10 +450,7 @@ const DEFAULT_FRONTIER_RANGE: [number, number] = [20, 70];
  * The returned `sanitizedContent` is always wrapped with ACIP security
  * boundary markers and is safe to pass to the agent.
  */
-export async function scanContent(
-  content: string,
-  options: ScanOptions,
-): Promise<ScanResult> {
+export async function scanContent(content: string, options: ScanOptions): Promise<ScanResult> {
   const quarantineThreshold = options.quarantineThreshold ?? DEFAULT_QUARANTINE_THRESHOLD;
   const [frontierLow, frontierHigh] = options.frontierScanRange ?? DEFAULT_FRONTIER_RANGE;
 
@@ -479,11 +463,7 @@ export async function scanContent(
   let frontierResult: FrontierScanResult | undefined;
 
   // ── Stage 2 (conditional) ───────────────────────────────────────────
-  if (
-    options.frontierScanner &&
-    riskScore >= frontierLow &&
-    riskScore < frontierHigh
-  ) {
+  if (options.frontierScanner && riskScore >= frontierLow && riskScore < frontierHigh) {
     try {
       frontierResult = await options.frontierScanner(content);
       frontierScanned = true;

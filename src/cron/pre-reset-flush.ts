@@ -32,9 +32,6 @@ const MIN_FLUSH_TOKENS = 2000;
 /** Maximum number of sessions to flush per sweep (prevent runaway API usage). */
 const MAX_FLUSH_PER_SWEEP = 20;
 
-/** Timer re-arm interval — recompute next flush every 60 seconds. */
-const TIMER_TICK_MS = 60_000;
-
 const PRE_RESET_FLUSH_PROMPT = [
   "Pre-reset memory flush.",
   "The daily session reset will happen in ~20 minutes — store any durable memories now.",
@@ -203,7 +200,7 @@ export async function runPreResetFlushSweep(deps: PreResetFlushDeps): Promise<Pr
   for (const { agentId, key, entry, storePath } of toFlush) {
     try {
       // Build a synthetic cron job for the flush turn, scoped to the correct agent
-      const syntheticJob = buildPreResetFlushJob(key, entry, agentId);
+      const syntheticJob = buildPreResetFlushJob(key, agentId);
       await deps.runIsolatedAgentJob({
         job: syntheticJob,
         message: PRE_RESET_FLUSH_PROMPT,
@@ -246,7 +243,7 @@ export async function runPreResetFlushSweep(deps: PreResetFlushDeps): Promise<Pr
 // Synthetic job builder
 // ---------------------------------------------------------------------------
 
-function buildPreResetFlushJob(sessionKey: string, _entry: SessionEntry, agentId: string): CronJob {
+function buildPreResetFlushJob(sessionKey: string, agentId: string): CronJob {
   const now = Date.now();
   return {
     id: `__pre-reset-flush:${sessionKey}`,
@@ -284,7 +281,10 @@ export type PreResetFlushTimerDeps = PreResetFlushDeps & {
 };
 
 /**
- * Start the pre-reset flush timer. Fires once daily at the computed time.
+ * Start the pre-reset flush timer. Fires once daily at the computed time,
+ * then re-arms for the next day. Uses `setTimeout` instead of `setInterval`
+ * to avoid waking the process 1440 times/day for a once-daily event.
+ *
  * Safe to call multiple times — stops any existing timer first.
  */
 export function startPreResetFlushTimer(deps: PreResetFlushTimerDeps): void {
@@ -293,29 +293,29 @@ export function startPreResetFlushTimer(deps: PreResetFlushTimerDeps): void {
   const atHour = deps.resetAtHour ?? DEFAULT_RESET_AT_HOUR;
   const leadMinutes = deps.leadMinutes ?? DEFAULT_PRE_RESET_LEAD_MINUTES;
 
-  const tick = () => {
+  const scheduleNext = () => {
     const now = Date.now();
     const msUntil = msUntilNextPreResetFlush(now, atHour, leadMinutes);
 
-    // If the flush is due within the next tick interval, run it now
-    if (msUntil <= TIMER_TICK_MS) {
-      deps.log.info(
-        { msUntil, atHour, leadMinutes },
-        "pre-reset-flush: timer firing — starting sweep",
-      );
-      void runPreResetFlushSweep(deps).catch((err) => {
-        deps.log.warn({ err: String(err) }, "pre-reset-flush: sweep failed unexpectedly");
-      });
+    activeTimer = setTimeout(() => {
+      deps.log.info({ atHour, leadMinutes }, "pre-reset-flush: timer firing — starting sweep");
+      void runPreResetFlushSweep(deps)
+        .catch((err) => {
+          deps.log.warn({ err: String(err) }, "pre-reset-flush: sweep failed unexpectedly");
+        })
+        .finally(() => {
+          // Re-arm for the next day
+          scheduleNext();
+        });
+    }, msUntil);
+
+    // Unref so the timer doesn't prevent process exit
+    if (activeTimer && typeof activeTimer === "object" && "unref" in activeTimer) {
+      activeTimer.unref();
     }
   };
 
-  // Start ticking
-  activeTimer = setInterval(tick, TIMER_TICK_MS);
-
-  // Unref so the timer doesn't prevent process exit
-  if (activeTimer && typeof activeTimer === "object" && "unref" in activeTimer) {
-    activeTimer.unref();
-  }
+  scheduleNext();
 
   const now = Date.now();
   const nextFlushMs = computeNextPreResetFlushMs(now, atHour, leadMinutes);
@@ -332,7 +332,7 @@ export function startPreResetFlushTimer(deps: PreResetFlushTimerDeps): void {
  */
 export function stopPreResetFlushTimer(): void {
   if (activeTimer !== null) {
-    clearInterval(activeTimer);
+    clearTimeout(activeTimer);
     activeTimer = null;
   }
 }

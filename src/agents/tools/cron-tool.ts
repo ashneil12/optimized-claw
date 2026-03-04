@@ -252,11 +252,18 @@ PAYLOAD TYPES (payload.kind):
   { "kind": "agentTurn", "message": "<prompt>", "model": "<optional>", "thinking": "<optional>", "timeoutSeconds": <optional, 0 means no timeout> }
 
 DELIVERY (top-level):
-  { "mode": "none|announce|webhook", "channel": "<optional>", "to": "<optional>", "bestEffort": <optional-bool> }
+  { "mode": "none|announce|webhook", "channel": "<channel>", "to": "<recipient_id>", "bestEffort": <optional-bool> }
   - Default for isolated agentTurn jobs (when delivery omitted): "announce"
-  - announce: send to chat channel (optional channel/to target)
+  - announce: send result to a chat channel
   - webhook: send finished-run event as HTTP POST to delivery.to (URL required)
-  - If the task needs to send to a specific chat/recipient, set announce delivery.channel/to; do not call messaging tools inside the run.
+  - none: silent job, no output sent
+
+DELIVERY BEST PRACTICES (IMPORTANT — read before creating announce jobs):
+  - ALWAYS set explicit channel AND to when using announce mode. Cron jobs run in isolated sessions with no inbound message context — without explicit targets, the system falls back to session-derived recipients which are often stale or wrong (e.g. resolving to @heartbeat), causing silent delivery failures.
+  - Use the platform's native numeric/internal ID for "to", never usernames or handles. Examples: Telegram numeric chat ID (e.g. "5614099189"), Discord snowflake ID, WhatsApp E.164 number.
+  - channel can be any configured messaging channel: telegram, discord, whatsapp, slack, matrix, etc.
+  - For silent maintenance jobs (cleanup, self-review, tidy), use delivery.mode="none".
+  - If unsure about the recipient ID, check your current session key — it encodes the channel and recipient. Or ask the user.
 
 CRITICAL CONSTRAINTS:
 - sessionTarget="main" REQUIRES payload.kind="systemEvent"

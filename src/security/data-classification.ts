@@ -38,14 +38,7 @@ export interface MessageContext {
 
 export interface DataMetadata {
   /** Content category hint */
-  type?:
-    | "crm"
-    | "financial"
-    | "email"
-    | "health"
-    | "config"
-    | "tool_output"
-    | "general";
+  type?: "crm" | "financial" | "email" | "health" | "config" | "tool_output" | "general";
 }
 
 export interface ClassificationResult {
@@ -71,45 +64,46 @@ const PII_PATTERNS: PiiPattern[] = [
   // US Social Security Numbers (XXX-XX-XXXX)
   {
     name: "ssn",
-    regex: /\b\d{3}-\d{2}-\d{4}\b/g,
+    regex: /\b\d{3}-\d{2}-\d{4}\b/,
     replacement: "[SSN-REDACTED]",
   },
-  // Credit card numbers (13-19 digits, optionally separated by spaces or dashes)
+  // Credit card numbers in standard groupings (e.g., 4111-1111-1111-1111).
+  // Requires at least one separator (space or dash) to avoid matching
+  // timestamps, IDs, and other long digit sequences.
   {
     name: "credit_card",
-    regex: /\b(?:\d[ -]*?){13,19}\b/g,
+    regex: /\b\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{1,7}\b/,
     replacement: "[CC-REDACTED]",
   },
   // US phone numbers
   {
     name: "phone_us",
-    regex: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
+    regex: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
     replacement: "[PHONE-REDACTED]",
   },
   // International phone (+ country code, 8-15 digits)
   {
     name: "phone_intl",
-    regex: /\+\d{1,3}[-.\s]?\d{4,14}\b/g,
+    regex: /\+\d{1,3}[-.\s]?\d{4,14}\b/,
     replacement: "[PHONE-REDACTED]",
   },
   // Personal email addresses (non-corporate-looking)
   {
     name: "personal_email",
     regex:
-      /\b[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|fastmail|yandex|mail)\.\w{2,}\b/gi,
+      /\b[a-zA-Z0-9._%+-]+@(?:gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|fastmail|yandex|mail)\.\w{2,}\b/i,
     replacement: "[EMAIL-REDACTED]",
   },
   // Dollar amounts ($X,XXX.XX or $X.XXM/K/B)
   {
     name: "dollar_amount",
-    regex: /\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?(?:\s*[MKBmkb](?:illion)?)?/g,
+    regex: /\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?(?:\s*[MKBmkb](?:illion)?)?/,
     replacement: "[AMOUNT-REDACTED]",
   },
   // Large numbers with currency context (e.g., "revenue of 2.3 million")
   {
     name: "financial_figure",
-    regex:
-      /\b\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\s*(?:million|billion|thousand|[MKBmkb])\b/gi,
+    regex: /\b\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\s*(?:million|billion|thousand|[MKBmkb])\b/i,
     replacement: "[AMOUNT-REDACTED]",
   },
 ];
@@ -200,10 +194,7 @@ const CLASSIFICATION_PATTERNS: ConfidentialPattern[] = [
 /**
  * Classify content into a data tier based on pattern matching and metadata.
  */
-export function classifyData(
-  content: string,
-  metadata?: DataMetadata,
-): ClassificationResult {
+export function classifyData(content: string, metadata?: DataMetadata): ClassificationResult {
   const detectedPatterns: string[] = [];
   let maxTier = DataTier.PUBLIC;
   let totalWeight = 0;
@@ -236,9 +227,8 @@ export function classifyData(
 
   // Check PII patterns (always CONFIDENTIAL)
   for (const pii of PII_PATTERNS) {
-    // Create a fresh regex to avoid shared state
-    const freshRegex = new RegExp(pii.regex.source, pii.regex.flags);
-    if (freshRegex.test(content)) {
+    // Patterns are non-global so .test() is safe without lastIndex reset
+    if (pii.regex.test(content)) {
       detectedPatterns.push(`pii:${pii.name}`);
       totalWeight += 25;
       maxTier = DataTier.CONFIDENTIAL;
@@ -310,9 +300,10 @@ export function isAllowedInContext(tier: DataTier, context: MessageContext): boo
 export function redactPII(text: string): string {
   let result = text;
   for (const pattern of PII_PATTERNS) {
-    // Create fresh regex to reset lastIndex for global patterns
-    const freshRegex = new RegExp(pattern.regex.source, pattern.regex.flags);
-    result = result.replace(freshRegex, pattern.replacement);
+    // Source patterns are non-global (for safe .test() in classifyData).
+    // Construct a global variant here for replace-all behavior.
+    const globalRegex = new RegExp(pattern.regex.source, pattern.regex.flags + "g");
+    result = result.replace(globalRegex, pattern.replacement);
   }
   return result;
 }

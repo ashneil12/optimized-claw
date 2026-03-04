@@ -323,9 +323,7 @@ function checkDiskSpace(dir: string): CheckResult {
 /**
  * Run a comprehensive system health check.
  */
-export async function runHealthCheck(
-  options?: HealthCheckOptions,
-): Promise<HealthCheckReport> {
+export async function runHealthCheck(options?: HealthCheckOptions): Promise<HealthCheckReport> {
   const logsDir = options?.logsDir ?? "data/logs";
   const port = options?.gatewayPort;
   const host = options?.gatewayHost ?? "127.0.0.1";
@@ -398,9 +396,9 @@ export function queryCronHistory(
     })
     .map((e) => ({
       timestamp: e.timestamp,
-      jobId: String(e.data.jobId ?? "unknown"),
-      status: String(e.data.status ?? e.level),
-      error: e.data.error ? String(e.data.error) : undefined,
+      jobId: typeof e.data.jobId === "string" ? e.data.jobId : "unknown",
+      status: typeof e.data.status === "string" ? e.data.status : e.level,
+      error: typeof e.data.error === "string" ? e.data.error : undefined,
       durationMs: typeof e.data.durationMs === "number" ? e.data.durationMs : undefined,
     }));
 }
@@ -418,7 +416,7 @@ export function detectPersistentFailures(
 
   const byJob = new Map<string, StoredEventEntry[]>();
   for (const entry of entries) {
-    const jobId = String(entry.data.jobId ?? "unknown");
+    const jobId = typeof entry.data.jobId === "string" ? entry.data.jobId : "unknown";
     const arr = byJob.get(jobId) ?? [];
     arr.push(entry);
     byJob.set(jobId, arr);
@@ -433,7 +431,13 @@ export function detectPersistentFailures(
         windowHours,
         recentErrors: failures
           .slice(-3)
-          .map((e) => String(e.data.error ?? e.data.message ?? "unknown")),
+          .map((e) =>
+            typeof e.data.error === "string"
+              ? e.data.error
+              : typeof e.data.message === "string"
+                ? e.data.message
+                : "unknown",
+          ),
       });
     }
   }
@@ -448,16 +452,23 @@ export function detectStaleJobs(
   logger: EventLogger,
   maxAgeMs: number = 2 * 60 * 60 * 1000,
 ): StaleJob[] {
-  const entries = logger.query({ event: "cron.", limit: 5000 });
+  // Only look back 2× maxAgeMs — a job can't be stale if it started longer ago than that
+  const since = new Date(Date.now() - maxAgeMs * 2);
+  const entries = logger.query({ event: "cron.", since, limit: 5000 });
 
   // Track last seen state per job
   const lastState = new Map<string, { state: string; timestamp: string }>();
   for (const entry of entries) {
-    const jobId = String(entry.data.jobId ?? "");
+    const jobId = typeof entry.data.jobId === "string" ? entry.data.jobId : "";
     if (!jobId) {
       continue;
     }
-    const state = String(entry.data.status ?? entry.data.state ?? "");
+    const state =
+      typeof entry.data.status === "string"
+        ? entry.data.status
+        : typeof entry.data.state === "string"
+          ? entry.data.state
+          : "";
     if (state) {
       lastState.set(jobId, { state, timestamp: entry.timestamp });
     }
@@ -494,7 +505,7 @@ export function getModelStatus(logger: EventLogger): ModelStatus {
 
   const modelCounts = new Map<string, number>();
   for (const entry of recent) {
-    const model = String(entry.data.model ?? "");
+    const model = typeof entry.data.model === "string" ? entry.data.model : "";
     if (model) {
       modelCounts.set(model, (modelCounts.get(model) ?? 0) + 1);
     }
@@ -528,10 +539,7 @@ export function getModelStatus(logger: EventLogger): ModelStatus {
 /**
  * Get usage dashboard from the event log.
  */
-export function getUsageDashboard(
-  logger: EventLogger,
-  since?: Date,
-): UsageDashboard {
+export function getUsageDashboard(logger: EventLogger, since?: Date): UsageDashboard {
   const sinceDate = since ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
   const entries = logger.query({ event: "llm.", since: sinceDate });
 
@@ -540,7 +548,7 @@ export function getUsageDashboard(
   let totalErrors = 0;
 
   for (const entry of entries) {
-    const model = String(entry.data.model ?? "unknown");
+    const model = typeof entry.data.model === "string" ? entry.data.model : "unknown";
     const existing = byModel.get(model) ?? {
       model,
       callCount: 0,

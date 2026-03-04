@@ -234,14 +234,16 @@ export function createEventLogger(options?: EventLoggerOptions): EventLogger {
       }
 
       if (filters?.since) {
-        const since = typeof filters.since === "string" ? filters.since : filters.since.toISOString();
+        const since =
+          typeof filters.since === "string" ? filters.since : filters.since.toISOString();
         if (entry.timestamp < since) {
           continue;
         }
       }
 
       if (filters?.until) {
-        const until = typeof filters.until === "string" ? filters.until : filters.until.toISOString();
+        const until =
+          typeof filters.until === "string" ? filters.until : filters.until.toISOString();
         if (entry.timestamp > until) {
           continue;
         }
@@ -269,10 +271,7 @@ export function createEventLogger(options?: EventLoggerOptions): EventLogger {
 /**
  * Get recent errors from the event log.
  */
-export function getRecentErrors(
-  logger: EventLogger,
-  hours: number = 24,
-): StoredEventEntry[] {
+export function getRecentErrors(logger: EventLogger, hours: number = 24): StoredEventEntry[] {
   const since = new Date(Date.now() - hours * 60 * 60 * 1000);
   return logger.query({ level: "error", since });
 }
@@ -366,36 +365,38 @@ export function rotateEventLogs(
  * Designed to be called from a morning cron job — the agent reads
  * this report and auto-fixes any issues.
  */
-export function reviewLogs(
-  logger: EventLogger,
-  since: Date,
-  until?: Date,
-): LogReviewReport {
+export function reviewLogs(logger: EventLogger, since: Date, until?: Date): LogReviewReport {
   const sinceStr = since.toISOString();
   const untilStr = (until ?? new Date()).toISOString();
 
   const allEntries = logger.query({ since: sinceStr, until: untilStr, limit: 10000 });
 
-  const errors = allEntries.filter((e) => e.level === "error");
-  const warnings = allEntries.filter((e) => e.level === "warn");
+  const errors: StoredEventEntry[] = [];
+  const warnings: StoredEventEntry[] = [];
+  for (const e of allEntries) {
+    if (e.level === "error") {
+      errors.push(e);
+    } else if (e.level === "warn") {
+      warnings.push(e);
+    }
+  }
 
-  // Group errors by event
+  // Single pass over errors to compute all groupings
   const errorsByEvent: Record<string, number> = {};
+  const errorsBySubsystem: Record<string, number> = {};
+  const messageCounts = new Map<string, { count: number; event: string }>();
+
   for (const e of errors) {
     errorsByEvent[e.event] = (errorsByEvent[e.event] ?? 0) + 1;
-  }
 
-  // Group errors by subsystem
-  const errorsBySubsystem: Record<string, number> = {};
-  for (const e of errors) {
     const sub = e.subsystem ?? "unknown";
     errorsBySubsystem[sub] = (errorsBySubsystem[sub] ?? 0) + 1;
-  }
 
-  // Find most frequent error messages
-  const messageCounts = new Map<string, { count: number; event: string }>();
-  for (const e of errors) {
-    const msg = String(e.data.message ?? e.data.error ?? JSON.stringify(e.data)).slice(0, 200);
+    const rawMsg = e.data.message ?? e.data.error;
+    const msg = (typeof rawMsg === "string" ? rawMsg : JSON.stringify(rawMsg ?? e.data)).slice(
+      0,
+      200,
+    );
     const existing = messageCounts.get(msg);
     if (existing) {
       existing.count += 1;

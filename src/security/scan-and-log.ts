@@ -10,30 +10,35 @@ import { scanContentSync, type ScanResult } from "./content-scanner.js";
 import type { ExternalContentSource } from "./external-content.js";
 
 // ---------------------------------------------------------------------------
-// Lazy singleton event logger — avoids creating a new instance per call
+// Eager singleton event logger — starts import at module load time so the
+// logger is ready before the first scan (modules load well before first HTTP
+// request). Previous lazy approach dropped the first security event.
 // ---------------------------------------------------------------------------
 
 let _cachedLogger: import("../logging/event-log.js").EventLogger | null = null;
 let _loggerInitPromise: Promise<void> | null = null;
 
-function ensureSharedEventLogger(): void {
-  if (_cachedLogger) {
+function initSharedEventLogger(): void {
+  if (_cachedLogger || _loggerInitPromise) {
     return;
   }
-  if (!_loggerInitPromise) {
-    _loggerInitPromise = import("../logging/event-log.js")
-      .then(({ createEventLogger }) => {
-        _cachedLogger = createEventLogger({});
-      })
-      .catch(() => {
-        // If import fails, we'll retry next call
-        _loggerInitPromise = null;
-      });
-  }
+  _loggerInitPromise = import("../logging/event-log.js")
+    .then(({ createEventLogger }) => {
+      _cachedLogger = createEventLogger({});
+    })
+    .catch(() => {
+      // Allow retry on next call
+      _loggerInitPromise = null;
+    });
 }
 
+// Kick off import eagerly at module load time
+initSharedEventLogger();
+
 function getSharedEventLogger(): import("../logging/event-log.js").EventLogger | null {
-  ensureSharedEventLogger();
+  if (!_cachedLogger) {
+    initSharedEventLogger();
+  }
   return _cachedLogger;
 }
 
@@ -64,10 +69,7 @@ export type ScanAndLogResult = Omit<ScanResult, "frontierResult">;
  *
  * Returns the scan result, or null if scanning itself failed.
  */
-export function scanAndLog(
-  content: string,
-  options: ScanAndLogOptions,
-): ScanAndLogResult | null {
+export function scanAndLog(content: string, options: ScanAndLogOptions): ScanAndLogResult | null {
   try {
     const result = scanContentSync(content, {
       source: options.source,
