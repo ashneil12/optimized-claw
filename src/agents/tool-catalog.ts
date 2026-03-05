@@ -114,6 +114,22 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "sql_query",
+    label: "sql_query",
+    description: "Query memory index",
+    sectionId: "memory",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
+    id: "sql_execute",
+    label: "sql_execute",
+    description: "Custom SQL databases",
+    sectionId: "memory",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "sessions_list",
     label: "sessions_list",
     description: "List sessions",

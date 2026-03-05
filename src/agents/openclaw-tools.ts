@@ -19,6 +19,7 @@ import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
+import { createSqlExecuteTool, createSqlQueryTool } from "./tools/sql-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
@@ -194,6 +195,23 @@ export function createOpenClawTools(options?: {
     ...(imageTool ? [imageTool] : []),
     ...(pdfTool ? [pdfTool] : []),
   ];
+
+  // SQL tools — sql_query needs memory config, sql_execute needs a workspace
+  const sqlQueryTool = createSqlQueryTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+  });
+  if (sqlQueryTool) {
+    tools.push(sqlQueryTool);
+  }
+  const sqlExecuteTool = createSqlExecuteTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+    workspaceDir,
+  });
+  if (sqlExecuteTool) {
+    tools.push(sqlExecuteTool);
+  }
 
   const pluginTools = resolvePluginTools({
     context: {

@@ -5,6 +5,41 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## SQL Tool Integration — `sql_query` & `sql_execute` (2026-03-05)
+
+**Purpose:** Give agents direct SQL access to structured data. Two new tools: `sql_query` for read-only access to the memory index database (supports both QMD and builtin backends), and `sql_execute` for read-write access to custom SQLite databases within the agent workspace.
+
+### Changes
+
+| File                                | Change                                                                                                  | Why                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `src/agents/tools/sql-tool.ts`      | **NEW** — `createSqlQueryTool()` and `createSqlExecuteTool()` factory functions                         | Core tool implementations                                    |
+| `src/agents/tools/sql-tool.test.ts` | **NEW** — 22 unit tests covering both tools                                                             | Validation of permissions, path sandboxing, CRUD, edge cases |
+| `src/agents/openclaw-tools.ts`      | Added import + registration of both SQL tools                                                           | Tools available to agents via the standard tool pipeline     |
+| `src/agents/tool-catalog.ts`        | Added `sql_query` and `sql_execute` entries in `CORE_TOOL_DEFINITIONS` (memory section, coding profile) | Agents with `coding` profile get these tools                 |
+
+### Tool Details
+
+**`sql_query`** — Read-only memory index queries:
+
+- Detects active backend via `resolveMemoryBackendConfig()`: QMD → resolves `$stateDir/agents/$agentId/qmd/xdg-cache/qmd/index.sqlite`; builtin → standard memory store path
+- QMD schema introspected dynamically via `PRAGMA table_info()`; builtin uses known static schema hint
+- Blocked: INSERT, UPDATE, DELETE, DROP, ATTACH, DETACH, dangerous PRAGMAs
+- Max 100 rows, 50K chars result cap
+
+**`sql_execute`** — Custom workspace databases:
+
+- Read-write `.db` files within agent workspace (independent of memory backend)
+- Path sandboxed (no traversal, no symlinks, must end `.db`), creates on first use, WAL mode
+- Supports SELECT, INSERT, UPDATE, DELETE, CREATE/DROP/ALTER TABLE, CREATE INDEX
+- Blocked: ATTACH, DETACH, dangerous PRAGMAs
+
+### Upstream Sync Risk
+
+**Low.** Two new custom files (no conflict). `openclaw-tools.ts` has a small import + array append. `tool-catalog.ts` has two array entries added after `memory_get`. Both are simple additions that merge cleanly.
+
+---
+
 ## Typing TTL "Still Thinking" Callback & Auto-Reply Cleanup (2026-03-03)
 
 **Purpose:** When long-running LLM tool calls exceed the 2-minute typing indicator TTL, the user previously saw the typing indicator stop with no feedback. Now the system sends a "⏳ Still thinking, hang tight..." status message so users know the agent is still working.
