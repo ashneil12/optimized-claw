@@ -5,6 +5,45 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Browser Startup Sweep — Auto-Update Stale Containers (2026-03-05)
+
+**Purpose:** Automatically update sandbox browser containers to the latest image when the gateway starts. Previously, deploying a new browser image (e.g., with the CDP proxy fix) required manually `docker pull` + `docker rm` + `docker create` for every agent browser container. Now, `docker compose pull && docker compose up -d` is all that's needed — the gateway handles the rest.
+
+### How It Works
+
+1. Gateway starts → `sweepStaleBrowserContainers()` fires (fire-and-forget, never blocks boot)
+2. Pulls the latest browser image from GHCR (`docker pull`)
+3. Lists all containers with label `openclaw.sandboxBrowser=1`
+4. Compares each container's image digest to the freshly pulled image
+5. Stale containers are removed and recreated with the same env/volumes/labels/name, then connected to `OPENCLAW_DOCKER_NETWORK`
+6. Up-to-date containers are untouched
+
+### Changes
+
+| File                                       | Change                                                                                                                                                          | Why                                                                |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `src/agents/sandbox/browser-sweep.ts`      | **NEW** — `sweepStaleBrowserContainers()` + helpers (`pullBrowserImage`, `listSandboxBrowserContainers`, `inspectBrowserContainer`, `recreateBrowserContainer`) | Core sweep logic                                                   |
+| `src/agents/sandbox/browser-sweep.test.ts` | **NEW** — 12 unit tests (pull failure, no containers, up-to-date skip, stale recreation, network connect, per-container error isolation)                        | Comprehensive coverage                                             |
+| `src/agents/sandbox/docker.ts`             | Added `readDockerImageId()` and `readDockerContainerImageId()`                                                                                                  | Image digest comparison utilities                                  |
+| `src/gateway/server-startup.ts`            | Fire-and-forget `sweepStaleBrowserContainers()` call in `startGatewaySidecars()` after browser control server starts                                            | Hook into gateway boot                                             |
+| `docker-compose.yml`                       | Added `OPENCLAW_DOCKER_NETWORK` env var to gateway service                                                                                                      | Ensures dynamically created browsers join the right Docker network |
+
+### Design Decisions
+
+- **Fire-and-forget**: Sweep runs async, never blocks gateway startup. Errors logged, not thrown.
+- **Per-container isolation**: One container failing doesn't abort the sweep for others.
+- **Label-based filtering**: Only touches `openclaw.sandboxBrowser=1` containers — won't affect non-browser sandboxes.
+- **Config preservation**: Reads env, volumes, and labels from the old container via `docker inspect` to faithfully recreate.
+- **Only when sandbox enabled**: Skipped entirely when `agents.defaults.sandbox.mode === "off"`.
+
+### Upstream Sync Risk
+
+**Low for `docker.ts`** — two new exported functions appended after `dockerContainerState()`, no existing code modified.
+**Low for `server-startup.ts`** — small import + fire-and-forget call block added after browser control server. If upstream restructures `startGatewaySidecars`, the insertion point is obvious.
+**None for `browser-sweep.ts`** — fully custom new file.
+
+---
+
 ## SQL Tool Integration — `sql_query` & `sql_execute` (2026-03-05)
 
 **Purpose:** Give agents direct SQL access to structured data. Two new tools: `sql_query` for read-only access to the memory index database (supports both QMD and builtin backends), and `sql_execute` for read-write access to custom SQLite databases within the agent workspace.

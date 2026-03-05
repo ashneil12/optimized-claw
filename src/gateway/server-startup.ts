@@ -7,6 +7,8 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
+import { sweepStaleBrowserContainers } from "../agents/sandbox/browser-sweep.js";
+import { DEFAULT_SANDBOX_BROWSER_IMAGE } from "../agents/sandbox/constants.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import type { CliDeps } from "../cli/deps.js";
@@ -37,7 +39,7 @@ export async function startGatewaySidecars(params: {
   defaultWorkspaceDir: string;
   deps: CliDeps;
   startChannels: () => Promise<void>;
-  log: { warn: (msg: string) => void };
+  log: { warn: (msg: string) => void; info?: (msg: string) => void };
   logHooks: {
     info: (msg: string) => void;
     warn: (msg: string) => void;
@@ -67,6 +69,19 @@ export async function startGatewaySidecars(params: {
     browserControl = await startBrowserControlServerIfEnabled();
   } catch (err) {
     params.logBrowser.error(`server failed to start: ${String(err)}`);
+  }
+
+  // Fire-and-forget: sweep stale sandbox browser containers on startup.
+  // Pulls the latest browser image and recreates any containers running an older image,
+  // so a gateway deploy automatically updates all agent browsers.
+  const sandboxMode = params.cfg.agents?.defaults?.sandbox?.mode;
+  if (sandboxMode && sandboxMode !== "off") {
+    const browserImage =
+      params.cfg.agents?.defaults?.sandbox?.browser?.image ?? DEFAULT_SANDBOX_BROWSER_IMAGE;
+    const dockerNetwork = process.env.OPENCLAW_DOCKER_NETWORK;
+    void sweepStaleBrowserContainers({ browserImage, dockerNetwork }).catch((err) => {
+      params.log.warn(`browser startup sweep failed: ${String(err)}`);
+    });
   }
 
   // Start Gmail watcher if configured (hooks.gmail.account).

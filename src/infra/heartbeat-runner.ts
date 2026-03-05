@@ -113,20 +113,27 @@ export type HeartbeatRunner = {
   updateConfig: (cfg: OpenClawConfig) => void;
 };
 
-function hasExplicitHeartbeatAgents(cfg: OpenClawConfig) {
-  const list = cfg.agents?.list ?? [];
-  return list.some((entry) => Boolean(entry?.heartbeat));
+/**
+ * Check if heartbeat is explicitly disabled for an agent entry.
+ * An agent opts out by setting `heartbeat: { enabled: false }`.
+ */
+function isHeartbeatExplicitlyDisabled(
+  entry: { heartbeat?: HeartbeatConfig } | undefined,
+): boolean {
+  return entry?.heartbeat?.enabled === false;
 }
 
 export function isHeartbeatEnabledForAgent(cfg: OpenClawConfig, agentId?: string): boolean {
   const resolvedAgentId = normalizeAgentId(agentId ?? resolveDefaultAgentId(cfg));
   const list = cfg.agents?.list ?? [];
-  const hasExplicit = hasExplicitHeartbeatAgents(cfg);
-  if (hasExplicit) {
-    return list.some(
-      (entry) => Boolean(entry?.heartbeat) && normalizeAgentId(entry?.id) === resolvedAgentId,
-    );
+
+  // If the agent is in the list, check for explicit opt-out.
+  const entry = list.find((e) => normalizeAgentId(e?.id) === resolvedAgentId);
+  if (entry) {
+    return !isHeartbeatExplicitlyDisabled(entry);
   }
+
+  // Not in list — only the default agent gets heartbeats.
   return resolvedAgentId === resolveDefaultAgentId(cfg);
 }
 
@@ -195,15 +202,22 @@ export function resolveHeartbeatSummaryForAgent(
 
 function resolveHeartbeatAgents(cfg: OpenClawConfig): HeartbeatAgent[] {
   const list = cfg.agents?.list ?? [];
-  if (hasExplicitHeartbeatAgents(cfg)) {
-    return list
-      .filter((entry) => entry?.heartbeat)
+
+  // All agents in the list get heartbeats by default, unless explicitly opted out.
+  if (list.length > 0) {
+    const agents = list
+      .filter((entry) => !isHeartbeatExplicitlyDisabled(entry))
       .map((entry) => {
         const id = normalizeAgentId(entry.id);
         return { agentId: id, heartbeat: resolveHeartbeatConfig(cfg, id) };
       })
       .filter((entry) => entry.agentId);
+    if (agents.length > 0) {
+      return agents;
+    }
   }
+
+  // Fallback: no list or all agents opted out — use default agent.
   const fallbackId = resolveDefaultAgentId(cfg);
   return [{ agentId: fallbackId, heartbeat: resolveHeartbeatConfig(cfg, fallbackId) }];
 }

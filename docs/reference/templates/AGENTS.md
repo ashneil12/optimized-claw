@@ -35,6 +35,7 @@ You wake up fresh each session. These files are your continuity:
 - **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
 - **Long-term:** `MEMORY.md` — curated memories, distilled essence
 - **Active work:** `WORKING.md` — current task, status, blockers, open loops
+- **Knowledge:** `memory/knowledge/<topic>.md` — reusable topic files, auto-indexed on boot (see memory-hygiene.md)
 
 See SOUL.md § Memory & Learning for the full rules. The short version: **no mental notes, write immediately, self-correct by updating this file.**
 

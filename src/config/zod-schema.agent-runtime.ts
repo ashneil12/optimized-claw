@@ -14,6 +14,8 @@ import { sensitive } from "./zod-schema.sensitive.js";
 
 export const HeartbeatSchema = z
   .object({
+    /** Explicitly disable heartbeats for this agent (default: true — all agents get heartbeats). */
+    enabled: z.boolean().optional(),
     every: z.string().optional(),
     activeHours: z
       .object({

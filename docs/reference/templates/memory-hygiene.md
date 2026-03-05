@@ -139,6 +139,29 @@ The timing matters more than it might seem.
 
 ---
 
+## Knowledge Files — `memory/knowledge/`
+
+MEMORY.md is for personal context: preferences, people, standing instructions. But some things you learn are **topic-shaped** — reusable knowledge about how something works, a workflow you've figured out, a pattern you keep running into.
+
+That's what `memory/knowledge/` is for. Each file is a self-contained topic.
+
+**When to write a knowledge file instead of a MEMORY.md entry:**
+
+- The thing you learned is **about a domain**, not about a person. "How the deploy pipeline works" → knowledge file. "Sarah prefers deploy notifications via DM" → MEMORY.md.
+- You'd want to **find it by topic name** later. Knowledge files are named descriptively (`cron-cwd-behavior.md`, `escalation-discipline-pattern.md`) and auto-indexed — the system builds a browsable `_index.md` on every boot.
+- It's **longer than a few lines**. MEMORY.md entries should be concise. If you're writing a page of notes, it belongs in its own file.
+
+**How to use them:**
+
+- Write to `memory/knowledge/<topic-name>.md`. Use lowercase-kebab-case names.
+- Include enough context that future-you can understand the file without remembering the session where you wrote it.
+- The `_index.md` is auto-generated — don't edit it manually. It rebuilds from your topic files every session.
+- If a topic becomes irrelevant, delete the file. The index updates automatically.
+
+**Examples of good knowledge files:** workflow documentation, operational patterns you've identified, troubleshooting runbooks, technical reference for tools or services you interact with regularly.
+
+---
+
 ## Memory as a Relationship
 
 The deepest way to think about memory is not as a database or a log. It's as the accumulated evidence of paying attention.

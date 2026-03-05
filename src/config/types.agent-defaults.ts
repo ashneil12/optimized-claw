@@ -212,6 +212,8 @@ export type AgentDefaultsConfig = {
   typingMode?: TypingMode;
   /** Periodic background heartbeat runs. */
   heartbeat?: {
+    /** Explicitly disable heartbeats for this agent (default: true). */
+    enabled?: boolean;
     /** Heartbeat interval (duration string, default unit: minutes; default: 1h). */
     every?: string;
     /** Optional active-hours window (local time); heartbeats run only inside this window. */

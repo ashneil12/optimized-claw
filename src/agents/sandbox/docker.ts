@@ -276,6 +276,36 @@ export async function dockerContainerState(name: string) {
   return { exists: true, running: result.stdout.trim() === "true" };
 }
 
+/**
+ * Returns the image ID (content-addressable digest) for a locally available image tag.
+ * Returns null if the image doesn't exist locally.
+ */
+export async function readDockerImageId(image: string): Promise<string | null> {
+  const result = await execDocker(["image", "inspect", "--format", "{{.Id}}", image], {
+    allowFailure: true,
+  });
+  if (result.code !== 0) {
+    return null;
+  }
+  const id = result.stdout.trim();
+  return id || null;
+}
+
+/**
+ * Returns the image ID that a container was created from.
+ * Returns null if the container doesn't exist.
+ */
+export async function readDockerContainerImageId(containerName: string): Promise<string | null> {
+  const result = await execDocker(["inspect", "--format", "{{.Image}}", containerName], {
+    allowFailure: true,
+  });
+  if (result.code !== 0) {
+    return null;
+  }
+  const id = result.stdout.trim();
+  return id || null;
+}
+
 function normalizeDockerLimit(value?: string | number) {
   if (value === undefined || value === null) {
     return undefined;
