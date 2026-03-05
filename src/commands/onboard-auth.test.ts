@@ -76,22 +76,21 @@ function createLegacyProviderConfig(params: {
   } as OpenClawConfig;
 }
 
-const EXPECTED_FALLBACKS = ["anthropic/claude-opus-4-5"] as const;
+const INITIAL_FALLBACKS = ["anthropic/claude-opus-4-5"] as const;
 
 function createConfigWithFallbacks() {
   return {
     agents: {
       defaults: {
-        model: { fallbacks: [...EXPECTED_FALLBACKS] },
+        model: { fallbacks: [...INITIAL_FALLBACKS] },
       },
     },
   };
 }
 
-function expectFallbacksPreserved(cfg: ReturnType<typeof applyMinimaxApiConfig>) {
-  expect(resolveAgentModelFallbackValues(cfg.agents?.defaults?.model)).toEqual([
-    ...EXPECTED_FALLBACKS,
-  ]);
+function expectFallbacksCleared(cfg: ReturnType<typeof applyMinimaxApiConfig>) {
+  const fallbacks = resolveAgentModelFallbackValues(cfg.agents?.defaults?.model);
+  expect(fallbacks ?? []).toEqual([]);
 }
 
 function expectPrimaryModelPreserved(cfg: ReturnType<typeof applyMinimaxApiProviderConfig>) {
@@ -631,12 +630,12 @@ describe("applyMistralProviderConfig", () => {
   });
 });
 
-describe("fallback preservation helpers", () => {
-  it("preserves existing model fallbacks", () => {
+describe("fallback clearing on provider apply", () => {
+  it("clears existing model fallbacks when applying a provider config", () => {
     const fallbackCases = [applyMinimaxApiConfig, applyXaiConfig, applyMistralConfig] as const;
     for (const applyConfig of fallbackCases) {
       const cfg = applyConfig(createConfigWithFallbacks());
-      expectFallbacksPreserved(cfg);
+      expectFallbacksCleared(cfg);
     }
   });
 });
@@ -723,7 +722,7 @@ describe("applyLitellmProviderConfig", () => {
 });
 
 describe("default-model config helpers", () => {
-  it("sets primary model and preserves existing model fallbacks", () => {
+  it("sets primary model and clears existing model fallbacks", () => {
     const configCases = [
       {
         applyConfig: applyOpencodeZenConfig,
@@ -739,7 +738,7 @@ describe("default-model config helpers", () => {
       expect(resolveAgentModelPrimaryValue(cfg.agents?.defaults?.model)).toBe(primaryModel);
 
       const cfgWithFallbacks = applyConfig(createConfigWithFallbacks());
-      expectFallbacksPreserved(cfgWithFallbacks);
+      expectFallbacksCleared(cfgWithFallbacks);
     }
   });
 });
