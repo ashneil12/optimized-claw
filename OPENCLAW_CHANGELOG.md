@@ -5,6 +5,54 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Chromium Stealth Hardening & Playwright Anti-Detection (2026-03-05)
+
+**Purpose:** Reduce browser detectability by anti-bot systems (Twitter/X, Cloudflare, etc.) through two layers: Docker/Chrome-level hardening and Playwright-level JavaScript evasions.
+
+### Layer 1 — Docker & Chrome Flags
+
+| File                                        | Change                                                                                                                                                                                                                                                                          | Why                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `Dockerfile.sandbox-browser`                | Added `fonts-noto`, `fonts-dejavu-core`, `fonts-freefont-ttf`                                                                                                                                                                                                                   | Missing system fonts is a trivial fingerprint                 |
+| `scripts/sandbox-browser-entrypoint.sh`     | Xvfb resolution `1280x800` → `1920x1080`; WebGL default **on** (`DISABLE_GRAPHICS_FLAGS=0`); `--disable-blink-features=AutomationControlled`; `--lang=en-US`; `--disable-features=AutofillServerCommunication`; `TZ_OVERRIDE` + `UA_OVERRIDE` env vars; window size `1920,1080` | Each addresses a known detection vector                       |
+| `dashboard/.../hetzner-instance-service.ts` | `hetznerLocationToTimezone()` helper; `TZ` + `LANG` env vars in main + per-agent browser Compose blocks                                                                                                                                                                         | Region-aware timezone prevents TZ/locale mismatch fingerprint |
+
+### Layer 2 — Playwright Stealth Scripts
+
+| File                             | Change                                                            | Why                                                                   |
+| -------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `src/browser/stealth-scripts.ts` | **NEW** — 8 evasion scripts injected via `addInitScript()`        | Patches CDP/Playwright fingerprints that Chrome flags alone can't fix |
+| `src/browser/pw-session.ts`      | `context.addInitScript(getStealthScript())` in `observeContext()` | Every page in every context gets evasions before site JS runs         |
+
+**Evasions included:**
+
+| #   | Target                    | What it patches                                          |
+| --- | ------------------------- | -------------------------------------------------------- |
+| 1   | `navigator.webdriver`     | Force `undefined` (belt-and-suspenders with Chrome flag) |
+| 2   | `navigator.plugins`       | Spoof 3-item PluginArray (Chrome PDF, NaCl)              |
+| 3   | `navigator.languages`     | Ensure `['en-US', 'en']`                                 |
+| 4   | `chrome.runtime`          | Stub `connect`/`sendMessage` to hide CDP artifacts       |
+| 5   | `Notification.permission` | Return `'default'` instead of `'denied'`                 |
+| 6   | WebGL renderer            | Override `UNMASKED_VENDOR/RENDERER` to Intel Iris        |
+| 7   | `window.chrome`           | Ensure `chrome.app`/`csi`/`loadTimes` exist              |
+| 8   | iframe `contentWindow`    | Patch cross-origin `webdriver` leak                      |
+
+### Upstream Sync Risk
+
+**None for Docker/entrypoint files** — fully custom.
+**Low for `pw-session.ts`** — single `import` + 3-line `addInitScript` call in `observeContext()`.
+**None for `stealth-scripts.ts`** — fully custom new file.
+
+### Verification
+
+- `navigator.webdriver` → `undefined`
+- `navigator.plugins.length` → `3`
+- `window.chrome` → object with `app`/`csi`/`loadTimes`
+- `bot.sannysoft.com` → all checks green
+- WebGL renderer → "Intel Iris OpenGL Engine"
+
+---
+
 ## Browser Startup Sweep — Auto-Update Stale Containers (2026-03-05)
 
 **Purpose:** Automatically update sandbox browser containers to the latest image when the gateway starts. Previously, deploying a new browser image (e.g., with the CDP proxy fix) required manually `docker pull` + `docker rm` + `docker create` for every agent browser container. Now, `docker compose pull && docker compose up -d` is all that's needed — the gateway handles the rest.
