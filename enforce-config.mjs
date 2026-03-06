@@ -744,6 +744,16 @@ function enforceCore(configPath) {
   const messages = ensure(config, "messages");
   messages.queue = { mode: "collect" };
 
+  // Video Understanding — bridge OPENCLAW_VIDEO_ENABLED to tools.media.video.enabled
+  const videoEnabledRaw = env("OPENCLAW_VIDEO_ENABLED");
+  if (videoEnabledRaw) {
+    const mediaVideo = ensure(tools, "media", "video");
+    mediaVideo.enabled = isTruthy(videoEnabledRaw);
+    console.log(
+      `[enforce-config] ✅ Video understanding ${mediaVideo.enabled ? "enabled" : "disabled"}`,
+    );
+  }
+
   // Browser (conditional)
   // IMPORTANT: merge rather than overwrite — ensure-agent-browsers.sh adds
   // per-agent profiles to this section. Overwriting would wipe them on every
