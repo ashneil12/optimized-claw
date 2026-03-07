@@ -1,3 +1,5 @@
+import http from "node:http";
+import https from "node:https";
 import WebSocket from "ws";
 import { isLoopbackHost } from "../gateway/net.js";
 import { rawDataToString } from "../infra/ws.js";
@@ -62,6 +64,158 @@ export function appendCdpPath(cdpUrl: string, path: string): string {
   const suffix = path.startsWith("/") ? path : `/${path}`;
   url.pathname = `${basePath}${suffix}`;
   return url.toString();
+}
+
+function headersInitToRecord(headers?: HeadersInit): Record<string, string> {
+  const normalized = new Headers(headers ?? {});
+  const record: Record<string, string> = {};
+  normalized.forEach((value, key) => {
+    record[key] = value;
+  });
+  return record;
+}
+
+function hasExplicitHostHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === "host");
+}
+
+function createAbortError(message = "The operation was aborted"): Error {
+  if (typeof DOMException === "function") {
+    return new DOMException(message, "AbortError");
+  }
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+async function withAbortTimeout<T>(
+  timeoutMs: number,
+  externalSignal: AbortSignal | null | undefined,
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const ctrl = new AbortController();
+  const onAbort = () => {
+    ctrl.abort(externalSignal?.reason ?? createAbortError());
+  };
+
+  if (externalSignal?.aborted) {
+    ctrl.abort(externalSignal.reason ?? createAbortError());
+  } else {
+    externalSignal?.addEventListener("abort", onAbort, { once: true });
+  }
+
+  const timer = setTimeout(() => {
+    ctrl.abort(createAbortError(`CDP request timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  try {
+    return await fn(ctrl.signal);
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onAbort);
+  }
+}
+
+function readRequestBody(body: RequestInit["body"]): string | Buffer | undefined {
+  if (body == null) {
+    return undefined;
+  }
+  if (typeof body === "string") {
+    return body;
+  }
+  if (body instanceof URLSearchParams) {
+    return body.toString();
+  }
+  if (body instanceof ArrayBuffer) {
+    return Buffer.from(body);
+  }
+  if (ArrayBuffer.isView(body)) {
+    return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+  }
+  throw new Error("Unsupported CDP request body type");
+}
+
+function appendResponseHeader(headers: Headers, key: string, value: string | string[] | undefined) {
+  if (value === undefined) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      headers.append(key, entry);
+    }
+    return;
+  }
+  headers.set(key, value);
+}
+
+async function httpRequestWithHostOverride(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  init?: RequestInit,
+): Promise<Response> {
+  const requestBody = readRequestBody(init?.body);
+
+  return await withAbortTimeout(timeoutMs, init?.signal, async (signal) => {
+    return await withNoProxyForCdpUrl(
+      url,
+      async () =>
+        await new Promise<Response>((resolve, reject) => {
+          const parsed = new URL(url);
+          const request =
+            parsed.protocol === "https:"
+              ? https.request
+              : parsed.protocol === "http:"
+                ? http.request
+                : null;
+          if (!request) {
+            reject(new Error(`Unsupported protocol for CDP request: ${parsed.protocol}`));
+            return;
+          }
+
+          const req = request(
+            parsed,
+            {
+              method: init?.method ?? "GET",
+              headers,
+              signal,
+              agent: getDirectAgentForCdp(url),
+            },
+            (res) => {
+              const chunks: Buffer[] = [];
+              res.on("data", (chunk) => {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              });
+              res.on("end", () => {
+                const responseHeaders = new Headers();
+                for (const [key, value] of Object.entries(res.headers)) {
+                  appendResponseHeader(responseHeaders, key, value);
+                }
+                const response = new Response(Buffer.concat(chunks), {
+                  status: res.statusCode ?? 500,
+                  statusText: res.statusMessage ?? "",
+                  headers: responseHeaders,
+                });
+                if (!response.ok) {
+                  reject(new Error(`HTTP ${response.status}`));
+                  return;
+                }
+                resolve(response);
+              });
+            },
+          );
+
+          req.on("error", (err) => {
+            reject(err instanceof Error ? err : new Error(String(err)));
+          });
+
+          if (requestBody !== undefined) {
+            req.write(requestBody);
+          }
+          req.end();
+        }),
+    );
+  });
 }
 
 function createCdpSender(ws: WebSocket) {
@@ -139,20 +293,17 @@ export async function fetchCdpChecked(
   timeoutMs = CDP_HTTP_REQUEST_TIMEOUT_MS,
   init?: RequestInit,
 ): Promise<Response> {
-  const ctrl = new AbortController();
-  const t = setTimeout(ctrl.abort.bind(ctrl), timeoutMs);
-  try {
-    const headers = getHeadersWithAuth(url, (init?.headers as Record<string, string>) || {});
-    const res = await withNoProxyForCdpUrl(url, () =>
-      fetch(url, { ...init, headers, signal: ctrl.signal }),
-    );
+  const headers = getHeadersWithAuth(url, headersInitToRecord(init?.headers));
+  if (hasExplicitHostHeader(headers)) {
+    return await httpRequestWithHostOverride(url, headers, timeoutMs, init);
+  }
+  return await withAbortTimeout(timeoutMs, init?.signal, async (signal) => {
+    const res = await withNoProxyForCdpUrl(url, () => fetch(url, { ...init, headers, signal }));
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
     return res;
-  } finally {
-    clearTimeout(t);
-  }
+  });
 }
 
 export async function fetchOk(

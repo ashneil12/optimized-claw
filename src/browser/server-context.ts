@@ -8,6 +8,7 @@ import {
   resolveBrowserProfileWithHotReload,
 } from "./resolved-config-refresh.js";
 import { createProfileAvailability } from "./server-context.availability.js";
+import { PROFILE_STATUS_TAB_LIST_TIMEOUT_MS } from "./server-context.constants.js";
 import { createProfileResetOps } from "./server-context.reset.js";
 import { createProfileSelectionOps } from "./server-context.selection.js";
 import { createProfileTabOps } from "./server-context.tab-ops.js";
@@ -36,6 +37,31 @@ export function listKnownProfileNames(state: BrowserServerState): string[] {
     names.add(name);
   }
   return [...names];
+}
+
+async function listTabsForStatus(params: {
+  ctx: ProfileContext;
+  profile: ResolvedBrowserProfile;
+}): Promise<BrowserTab[]> {
+  const { ctx, profile } = params;
+  if (profile.cdpIsLoopback) {
+    return await ctx.listTabs();
+  }
+  return await new Promise<BrowserTab[]>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`profile status tab listing timed out for "${profile.name}"`));
+    }, PROFILE_STATUS_TAB_LIST_TIMEOUT_MS);
+    void ctx.listTabs().then(
+      (tabs) => {
+        clearTimeout(timer);
+        resolve(tabs);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 /**
@@ -167,7 +193,7 @@ export function createBrowserRouteContext(opts: ContextOptions): BrowserRouteCon
           running = true;
           try {
             const ctx = createProfileContext(opts, profile);
-            const tabs = await ctx.listTabs();
+            const tabs = await listTabsForStatus({ ctx, profile });
             tabCount = tabs.filter((t) => t.type === "page").length;
           } catch {
             // Browser might not be responsive
@@ -179,7 +205,7 @@ export function createBrowserRouteContext(opts: ContextOptions): BrowserRouteCon
             if (reachable) {
               running = true;
               const ctx = createProfileContext(opts, profile);
-              const tabs = await ctx.listTabs().catch(() => []);
+              const tabs = await listTabsForStatus({ ctx, profile }).catch(() => []);
               tabCount = tabs.filter((t) => t.type === "page").length;
             }
           } catch {

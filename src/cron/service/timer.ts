@@ -28,6 +28,8 @@ import { DEFAULT_JOB_TIMEOUT_MS, resolveCronJobTimeoutMs } from "./timeout-polic
 export { DEFAULT_JOB_TIMEOUT_MS } from "./timeout-policy.js";
 
 const MAX_TIMER_DELAY_MS = 60_000;
+const MIN_NEXT_WAKE_MS = 60 * 60_000;
+const MAX_NEXT_WAKE_MS = 12 * 60 * 60_000;
 
 /**
  * Minimum gap between consecutive fires of the same cron job.  This is a
@@ -48,6 +50,37 @@ type TimedCronRunOutcome = CronRunOutcome &
     startedAt: number;
     endedAt: number;
   };
+
+export function parseNextWakeDuration(text: string | undefined): number | undefined {
+  const source = text?.trim();
+  if (!source) {
+    return undefined;
+  }
+  const match = /NEXT_WAKE:\s*([^\n\r]+)/i.exec(source);
+  if (!match) {
+    return undefined;
+  }
+  const durationText = match[1]?.trim();
+  if (!durationText) {
+    return undefined;
+  }
+  let totalMs = 0;
+  let matchedAny = false;
+  const tokenPattern = /(\d+(?:\.\d+)?)\s*([hm])/gi;
+  for (const token of durationText.matchAll(tokenPattern)) {
+    const rawValue = Number(token[1]);
+    const unit = token[2]?.toLowerCase();
+    if (!Number.isFinite(rawValue) || rawValue <= 0 || !unit) {
+      continue;
+    }
+    matchedAny = true;
+    totalMs += unit === "h" ? rawValue * 60 * 60_000 : rawValue * 60_000;
+  }
+  if (!matchedAny || totalMs <= 0) {
+    return undefined;
+  }
+  return Math.min(Math.max(totalMs, MIN_NEXT_WAKE_MS), MAX_NEXT_WAKE_MS);
+}
 
 export async function executeJobCoreWithTimeout(
   state: CronServiceState,
@@ -285,6 +318,7 @@ export function applyJobResult(
     delivered?: boolean;
     startedAt: number;
     endedAt: number;
+    nextRunAfterMs?: number;
   },
 ): boolean {
   job.state.runningAtMs = undefined;
@@ -405,6 +439,14 @@ export function applyJobResult(
         "cron: applying error backoff",
       );
     } else if (job.enabled) {
+      if (
+        typeof result.nextRunAfterMs === "number" &&
+        Number.isFinite(result.nextRunAfterMs) &&
+        result.nextRunAfterMs > 0
+      ) {
+        job.state.nextRunAtMs = result.endedAt + result.nextRunAfterMs;
+        return shouldDelete;
+      }
       let naturalNext: number | undefined;
       try {
         naturalNext = computeJobNextRunAtMs(job, result.endedAt);
@@ -977,6 +1019,7 @@ export async function executeJobCore(
     message: job.payload.message,
     abortSignal,
   });
+  const nextRunAfterMs = parseNextWakeDuration(res.outputText ?? res.summary);
 
   if (abortSignal?.aborted) {
     return { status: "error", error: timeoutErrorMessage() };
@@ -1026,6 +1069,7 @@ export async function executeJobCore(
     status: res.status,
     error: res.error,
     summary: res.summary,
+    nextRunAfterMs,
     delivered: res.delivered,
     deliveryAttempted: res.deliveryAttempted,
     sessionId: res.sessionId,

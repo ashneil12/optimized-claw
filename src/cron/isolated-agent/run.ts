@@ -64,6 +64,7 @@ import {
   pickSummaryFromPayloads,
   resolveHeartbeatAckMaxChars,
 } from "./helpers.js";
+import { resolveReflectionRunPreflight } from "./reflection-preflight.js";
 import { resolveCronAgentSessionKey } from "./session-key.js";
 import { resolveCronSession } from "./session.js";
 import { resolveCronSkillsSnapshot } from "./skills-snapshot.js";
@@ -382,6 +383,19 @@ export async function runCronIsolatedAgentTurn(params: {
   if (deliveryRequested) {
     commandBody =
       `${commandBody}\n\nReturn your summary as plain text; it will be delivered automatically. If the task explicitly calls for messaging a specific external recipient, note who/where it should go instead of sending it yourself.`.trim();
+  }
+
+  const reflectionPreflight = await resolveReflectionRunPreflight({
+    cfg: params.cfg,
+    job: params.job,
+    agentId,
+    workspaceDir,
+  });
+  if (reflectionPreflight.shouldSkip) {
+    return withRunSession({
+      status: "skipped",
+      summary: reflectionPreflight.summary,
+    });
   }
 
   const existingSkillsSnapshot = cronSession.sessionEntry.skillsSnapshot;

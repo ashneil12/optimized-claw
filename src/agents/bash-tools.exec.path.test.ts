@@ -91,11 +91,15 @@ describe("exec PATH login shell merge", () => {
       return;
     }
 
+    const { createExecTool } = await import("./bash-tools.exec.js");
     const tool = createExecTool({ host: "gateway", security: "full", ask: "off" });
     const result = await tool.execute("call-openclaw-shell", {
       command: 'printf "%s" "${OPENCLAW_SHELL:-}"',
     });
-    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+    const value = normalizeText(
+      result.content.find((item): item is { type: "text"; text: string } => item.type === "text")
+        ?.text,
+    );
 
     expect(value).toBe("exec");
   });

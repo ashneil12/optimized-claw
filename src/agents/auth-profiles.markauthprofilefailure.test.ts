@@ -4,6 +4,35 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureAuthProfileStore, markAuthProfileFailure } from "./auth-profiles.js";
 
+type AuthProfileStore = ReturnType<typeof ensureAuthProfileStore>;
+
+async function withAuthProfileStore(
+  fn: (ctx: { agentDir: string; store: AuthProfileStore }) => Promise<void>,
+): Promise<void> {
+  const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-auth-"));
+  try {
+    const authPath = path.join(agentDir, "auth-profiles.json");
+    fs.writeFileSync(
+      authPath,
+      JSON.stringify({
+        version: 1,
+        profiles: {
+          "anthropic:default": {
+            type: "api_key",
+            provider: "anthropic",
+            key: "sk-default",
+          },
+        },
+      }),
+    );
+
+    const store = ensureAuthProfileStore(agentDir);
+    await fn({ agentDir, store });
+  } finally {
+    fs.rmSync(agentDir, { recursive: true, force: true });
+  }
+}
+
 describe("markAuthProfileFailure", () => {
   it("disables billing failures for ~5 hours by default", async () => {
     const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-auth-"));

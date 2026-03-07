@@ -37,6 +37,9 @@ export const runWithModelFallbackMock = createMock();
 export const runEmbeddedPiAgentMock = createMock();
 export const runCliAgentMock = createMock();
 export const getCliSessionIdMock = createMock();
+export const loadSessionStoreMock = createMock();
+export const resolveStorePathMock = createMock();
+export const resolveReflectionRunPreflightMock = createMock();
 export const updateSessionStoreMock = createMock();
 export const resolveCronSessionMock = createMock();
 export const logWarnMock = createMock();
@@ -130,8 +133,10 @@ vi.mock("../../cli/outbound-send-deps.js", () => ({
 }));
 
 vi.mock("../../config/sessions.js", () => ({
+  loadSessionStore: loadSessionStoreMock,
   resolveAgentMainSessionKey: vi.fn().mockReturnValue("main:default"),
   resolveSessionTranscriptPath: vi.fn().mockReturnValue("/tmp/transcript.jsonl"),
+  resolveStorePath: resolveStorePathMock,
   setSessionRuntimeModel: vi.fn(),
   updateSessionStore: updateSessionStoreMock,
 }));
@@ -192,6 +197,10 @@ vi.mock("./helpers.js", () => ({
 
 vi.mock("./session.js", () => ({
   resolveCronSession: resolveCronSessionMock,
+}));
+
+vi.mock("./reflection-preflight.js", () => ({
+  resolveReflectionRunPreflight: resolveReflectionRunPreflightMock,
 }));
 
 vi.mock("../../agents/defaults.js", () => ({
@@ -265,6 +274,15 @@ export function resetRunCronIsolatedAgentTurnHarness(): void {
 
   runCliAgentMock.mockReset();
   getCliSessionIdMock.mockReturnValue(undefined);
+
+  loadSessionStoreMock.mockReset();
+  loadSessionStoreMock.mockReturnValue({});
+
+  resolveStorePathMock.mockReset();
+  resolveStorePathMock.mockReturnValue("/tmp/sessions.json");
+
+  resolveReflectionRunPreflightMock.mockReset();
+  resolveReflectionRunPreflightMock.mockResolvedValue({ shouldSkip: false });
 
   updateSessionStoreMock.mockReset();
   updateSessionStoreMock.mockResolvedValue(undefined);

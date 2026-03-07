@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "vitest";
-import { sleep } from "../utils.ts";
+import { sleep } from "../utils.js";
 import {
   getFinishedSession,
   getSession,
   resetProcessRegistryForTests,
-} from "./bash-process-registry";
-import { createExecTool } from "./bash-tools.exec";
-import { killProcessTree } from "./shell-utils";
+} from "./bash-process-registry.js";
+import { createExecTool } from "./bash-tools.exec.js";
+import { killProcessTree } from "./shell-utils.js";
 
 afterEach(() => {
   resetProcessRegistryForTests();

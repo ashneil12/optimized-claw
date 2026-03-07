@@ -77,6 +77,19 @@ export type ZaloAuthStatus = {
   message: string;
 };
 
+export type ZcaRunOptions = {
+  cwd?: string;
+  timeout?: number;
+  profile?: string;
+};
+
+export type ZcaResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
 export type ZalouserToolConfig = { allow?: string[]; deny?: string[] };
 
 export type ZalouserGroupConfig = {

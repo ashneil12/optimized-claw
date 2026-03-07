@@ -294,11 +294,13 @@ export async function pruneMemoryFileIfNeeded(
  * Run the size-triggered pruner on all three memory files for a workspace.
  * This is cheap to call repeatedly — it no-ops when files are small.
  */
-export async function runMemoryPruneForWorkspace(
-  workspaceDir: string,
-): Promise<PruneResult[]> {
+export async function runMemoryPruneForWorkspace(workspaceDir: string): Promise<PruneResult[]> {
   const results: PruneResult[] = [];
-  for (const relPath of [DIARY_RELATIVE_PATH, SCRATCHPAD_RELATIVE_PATH, SELF_REVIEW_RELATIVE_PATH]) {
+  for (const relPath of [
+    DIARY_RELATIVE_PATH,
+    SCRATCHPAD_RELATIVE_PATH,
+    SELF_REVIEW_RELATIVE_PATH,
+  ]) {
     try {
       results.push(await pruneMemoryFileIfNeeded(workspaceDir, relPath));
     } catch (err) {
@@ -415,10 +417,14 @@ export async function promoteMissPatterns(
         // Simple overlap check: if 60%+ of words match, consider it covered
         const fixWords = new Set(fix.split(" ").filter((w) => w.length > 3));
         const existingWords = new Set(existing.split(" ").filter((w) => w.length > 3));
-        if (fixWords.size === 0) return false;
+        if (fixWords.size === 0) {
+          return false;
+        }
         let overlap = 0;
         for (const word of fixWords) {
-          if (existingWords.has(word)) overlap++;
+          if (existingWords.has(word)) {
+            overlap++;
+          }
         }
         return overlap / fixWords.size > 0.6;
       });
@@ -440,7 +446,10 @@ export async function promoteMissPatterns(
   const criticalSectionHeader = "## CRITICAL Rules";
   let newIdentityContent: string;
 
-  if (identityContent.includes(criticalSectionHeader) || identityContent.includes("## Critical Rules")) {
+  if (
+    identityContent.includes(criticalSectionHeader) ||
+    identityContent.includes("## Critical Rules")
+  ) {
     // Append after the existing section header
     const insertPoint = identityContent.includes(criticalSectionHeader)
       ? criticalSectionHeader
@@ -451,14 +460,10 @@ export async function promoteMissPatterns(
     const lineEnd = identityContent.indexOf("\n", afterHeader);
     const insertIdx = lineEnd === -1 ? identityContent.length : lineEnd;
 
-    const newRules = toPromote
-      .map((fix) => `\n- **CRITICAL:** ${fix}`)
-      .join("");
+    const newRules = toPromote.map((fix) => `\n- **CRITICAL:** ${fix}`).join("");
 
     newIdentityContent =
-      identityContent.slice(0, insertIdx) +
-      newRules +
-      identityContent.slice(insertIdx);
+      identityContent.slice(0, insertIdx) + newRules + identityContent.slice(insertIdx);
   } else {
     // Create new CRITICAL Rules section before the first ## section or at end
     const newSection =
@@ -685,8 +690,7 @@ export async function runDiaryArchiveForWorkspace(
     const selfReviewContent = await fs.readFile(selfReviewPath, "utf-8");
     const selfReviewTemplate = await loadTemplateContent("memory/self-review.md");
     const selfReviewHasContent =
-      selfReviewContent.trim().length > 0 &&
-      selfReviewContent.trim() !== selfReviewTemplate.trim();
+      selfReviewContent.trim().length > 0 && selfReviewContent.trim() !== selfReviewTemplate.trim();
 
     if (selfReviewHasContent) {
       const archiveSelfReviewName = `self-review-${dateSuffix}.md`;

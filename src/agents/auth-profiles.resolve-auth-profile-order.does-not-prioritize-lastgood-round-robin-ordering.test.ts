@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveAuthProfileOrder } from "./auth-profiles.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { resolveAuthProfileOrder, type AuthProfileStore } from "./auth-profiles.js";
 
 describe("resolveAuthProfileOrder", () => {
   const store: AuthProfileStore = {
@@ -17,7 +18,7 @@ describe("resolveAuthProfileOrder", () => {
       },
     },
   };
-  const cfg = {
+  const cfg: OpenClawConfig = {
     auth: {
       profiles: {
         "anthropic:default": { provider: "anthropic", mode: "api_key" },
@@ -54,9 +55,9 @@ describe("resolveAuthProfileOrder", () => {
       cfg: {
         auth: {
           order: { anthropic: ["anthropic:work", "anthropic:default"] },
-          profiles: cfg.auth.profiles,
+          profiles: cfg.auth?.profiles ?? {},
         },
-      },
+      } as OpenClawConfig,
       store,
       provider: "anthropic",
     });
@@ -67,9 +68,9 @@ describe("resolveAuthProfileOrder", () => {
       cfg: {
         auth: {
           order: { anthropic: ["anthropic:default", "anthropic:work"] },
-          profiles: cfg.auth.profiles,
+          profiles: cfg.auth?.profiles ?? {},
         },
-      },
+      } as OpenClawConfig,
       store: {
         ...store,
         order: { anthropic: ["anthropic:work", "anthropic:default"] },
@@ -99,9 +100,9 @@ describe("resolveAuthProfileOrder", () => {
       cfg: {
         auth: {
           order: { anthropic: ["anthropic:default", "anthropic:work"] },
-          profiles: cfg.auth.profiles,
+          profiles: cfg.auth?.profiles ?? {},
         },
-      },
+      } as OpenClawConfig,
       store: {
         ...store,
         usageStats: {
@@ -137,9 +138,9 @@ describe("resolveAuthProfileOrder", () => {
       cfg: {
         auth: {
           order: { anthropic: ["anthropic:default", "anthropic:work"] },
-          profiles: cfg.auth.profiles,
+          profiles: cfg.auth?.profiles ?? {},
         },
-      },
+      } as OpenClawConfig,
       store: {
         ...store,
         usageStats: {
@@ -185,7 +186,7 @@ describe("resolveAuthProfileOrder", () => {
             "anthropic:oauth-cred": { provider: "anthropic", mode: "oauth" },
           },
         },
-      },
+      } as OpenClawConfig,
     });
     expect(orderOauthCred).toContain("anthropic:oauth-cred");
 
@@ -198,7 +199,7 @@ describe("resolveAuthProfileOrder", () => {
             "anthropic:token-cred": { provider: "anthropic", mode: "oauth" },
           },
         },
-      },
+      } as OpenClawConfig,
     });
     expect(orderTokenCred).toContain("anthropic:token-cred");
   });
@@ -227,7 +228,7 @@ describe("resolveAuthProfileOrder", () => {
             "anthropic:oauth-cred": { provider: "anthropic", mode: "token" },
           },
         },
-      },
+      } as OpenClawConfig,
     });
     expect(order).not.toContain("anthropic:oauth-cred");
   });

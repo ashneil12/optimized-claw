@@ -1799,10 +1799,11 @@ function seedSubAgentCronJobs(dataDir) {
     // - file exists → reflection interval patching only
     const existed = existsSync(jobsFile);
     const overrides = AGENT_ADVANCED_CRON_OVERRIDES.get(agentName);
-    const includeSet = overrides?.include || overrides;  // back-compat: handle both old Set and new object format
-    const effectiveExcludes = includeSet instanceof Set
-      ? new Set([...MAIN_ONLY_JOBS].filter((n) => !includeSet.has(n)))
-      : MAIN_ONLY_JOBS;
+    const includeSet = overrides?.include || overrides; // back-compat: handle both old Set and new object format
+    const effectiveExcludes =
+      includeSet instanceof Set
+        ? new Set([...MAIN_ONLY_JOBS].filter((n) => !includeSet.has(n)))
+        : MAIN_ONLY_JOBS;
     seedCronJobs(jobsFile, { excludeNames: effectiveExcludes });
 
     if (!existed && existsSync(jobsFile)) {
@@ -1815,24 +1816,34 @@ function seedSubAgentCronJobs(dataDir) {
     // ── Post-seed fixes: delivery targets + duplicate cleanup ──────────
     if (existsSync(jobsFile)) {
       const store = readConfig(jobsFile);
-      if (!store.jobs || store.jobs.length === 0) continue;
+      if (!store.jobs || store.jobs.length === 0) {
+        continue;
+      }
 
       let changed = false;
 
       // 1. Remove agent-prefixed duplicate jobs from old seeding format.
       //    e.g. "jael-self-review" when canonical "self-review" also exists.
-      const canonicalNames = new Set(store.jobs.filter((j) => !j.name.startsWith(`${agentName}-`)).map((j) => j.name));
+      const canonicalNames = new Set(
+        store.jobs.filter((j) => !j.name.startsWith(`${agentName}-`)).map((j) => j.name),
+      );
       const beforeCount = store.jobs.length;
       store.jobs = store.jobs.filter((j) => {
-        if (!j.name.startsWith(`${agentName}-`)) return true;
+        if (!j.name.startsWith(`${agentName}-`)) {
+          return true;
+        }
         const baseName = j.name.slice(agentName.length + 1);
         if (canonicalNames.has(baseName)) {
-          console.log(`[enforce-config] Removed duplicate job '${j.name}' (canonical '${baseName}' exists)`);
+          console.log(
+            `[enforce-config] Removed duplicate job '${j.name}' (canonical '${baseName}' exists)`,
+          );
           return false;
         }
         return true;
       });
-      if (store.jobs.length !== beforeCount) changed = true;
+      if (store.jobs.length !== beforeCount) {
+        changed = true;
+      }
 
       // 2. Patch announce-mode jobs with missing delivery targets.
       //    Resolve from credential store so sub-agents get per-agent routing.
@@ -1845,7 +1856,9 @@ function seedSubAgentCronJobs(dataDir) {
           const override = deliveryOverrides[job.name];
           if (JSON.stringify(job.delivery) !== JSON.stringify(override)) {
             job.delivery = { ...override };
-            console.log(`[enforce-config] Applied delivery override for '${job.name}' on agent '${agentName}': ${JSON.stringify(override)}`);
+            console.log(
+              `[enforce-config] Applied delivery override for '${job.name}' on agent '${agentName}': ${JSON.stringify(override)}`,
+            );
             changed = true;
           }
           continue;

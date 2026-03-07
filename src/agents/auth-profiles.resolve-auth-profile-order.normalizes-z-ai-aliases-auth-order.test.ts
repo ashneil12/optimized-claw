@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveAuthProfileOrder } from "./auth-profiles.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { resolveAuthProfileOrder, type AuthProfileStore } from "./auth-profiles.js";
 
 describe("resolveAuthProfileOrder", () => {
   const _store: AuthProfileStore = {
@@ -36,7 +37,7 @@ describe("resolveAuthProfileOrder", () => {
             "zai:work": { provider: "zai", mode: "api_key" },
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -66,7 +67,7 @@ describe("resolveAuthProfileOrder", () => {
             "openai:work": { provider: "openai", mode: "api_key" },
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -95,7 +96,7 @@ describe("resolveAuthProfileOrder", () => {
             "zai:work": { provider: "Z.AI", mode: "api_key" },
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {

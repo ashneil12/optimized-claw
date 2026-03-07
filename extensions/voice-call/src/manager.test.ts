@@ -5,6 +5,8 @@ import { VoiceCallConfigSchema } from "./config.js";
 import { CallManager } from "./manager.js";
 import type { VoiceCallProvider } from "./providers/base.js";
 import type {
+  GetCallStatusInput,
+  GetCallStatusResult,
   HangupCallInput,
   InitiateCallInput,
   InitiateCallResult,
@@ -47,6 +49,9 @@ class FakeProvider implements VoiceCallProvider {
   }
   async stopListening(input: StopListeningInput): Promise<void> {
     this.stopListeningCalls.push(input);
+  }
+  async getCallStatus(_input: GetCallStatusInput): Promise<GetCallStatusResult> {
+    return { status: "in-progress", isTerminal: false };
   }
 }
 

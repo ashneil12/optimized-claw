@@ -27,7 +27,7 @@ describe("handleControlUiHttpRequest", () => {
     try {
       await fs.writeFile(path.join(tmp, "index.html"), "<html></html>\n");
       const { res, setHeader } = makeResponse();
-      const handled = await handleControlUiHttpRequest(
+      const handled = handleControlUiHttpRequest(
         { url: "/", method: "GET" } as IncomingMessage,
         res,
         {
@@ -36,7 +36,10 @@ describe("handleControlUiHttpRequest", () => {
       );
       expect(handled).toBe(true);
       expect(setHeader).toHaveBeenCalledWith("X-Frame-Options", "DENY");
-      expect(setHeader).toHaveBeenCalledWith("Content-Security-Policy", "frame-ancestors 'none'");
+      expect(setHeader).toHaveBeenCalledWith(
+        "Content-Security-Policy",
+        expect.stringContaining("frame-ancestors 'none'"),
+      );
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }

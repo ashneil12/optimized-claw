@@ -1,5 +1,22 @@
-import { describe, it, expect } from "vitest";
-import { parseNextWakeDuration } from "./timer.js";
+import { describe, expect, it, vi } from "vitest";
+import { createMockCronStateForJobs } from "../service.test-harness.js";
+import { applyJobResult, executeJobCore, parseNextWakeDuration } from "./timer.js";
+
+function makeIsolatedEveryJob() {
+  return {
+    id: "consciousness",
+    name: "Consciousness",
+    enabled: true,
+    schedule: { kind: "every", everyMs: 7_200_000, anchorMs: 0 },
+    sessionTarget: "isolated",
+    wakeMode: "next-heartbeat",
+    payload: {
+      kind: "agentTurn",
+      message: "Background consciousness mode",
+    },
+    state: {},
+  } as never;
+}
 
 describe("parseNextWakeDuration", () => {
   it("parses hours", () => {
@@ -43,5 +60,37 @@ describe("parseNextWakeDuration", () => {
 
   it("ignores case in unit", () => {
     expect(parseNextWakeDuration("NEXT_WAKE: 3H")).toBe(3 * 60 * 60_000);
+  });
+});
+
+describe("NEXT_WAKE scheduling", () => {
+  it("extracts nextRunAfterMs from isolated job output", async () => {
+    const job = makeIsolatedEveryJob();
+    const state = createMockCronStateForJobs({ jobs: [job] });
+    state.deps.runIsolatedAgentJob = vi.fn().mockResolvedValue({
+      status: "ok",
+      summary: "HEARTBEAT_OK",
+      outputText: "HEARTBEAT_OK\nNEXT_WAKE: 6h",
+    });
+
+    const result = await executeJobCore(state, job);
+
+    expect(result.nextRunAfterMs).toBe(6 * 60 * 60_000);
+  });
+
+  it("overrides the natural schedule when nextRunAfterMs is set", () => {
+    const job = makeIsolatedEveryJob();
+    const endedAt = Date.UTC(2026, 2, 7, 12, 0, 0);
+    const state = createMockCronStateForJobs({ jobs: [job], nowMs: endedAt });
+
+    const shouldDelete = applyJobResult(state, job, {
+      status: "ok",
+      startedAt: endedAt - 5_000,
+      endedAt,
+      nextRunAfterMs: 6 * 60 * 60_000,
+    });
+
+    expect(shouldDelete).toBe(false);
+    expect(job.state.nextRunAtMs).toBe(endedAt + 6 * 60 * 60_000);
   });
 });

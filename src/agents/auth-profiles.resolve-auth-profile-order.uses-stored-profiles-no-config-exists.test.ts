@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveAuthProfileOrder } from "./auth-profiles.js";
+import type { OpenClawConfig } from "../config/config.js";
+import { resolveAuthProfileOrder, type AuthProfileStore } from "./auth-profiles.js";
 
 describe("resolveAuthProfileOrder", () => {
   const store: AuthProfileStore = {
@@ -17,7 +18,7 @@ describe("resolveAuthProfileOrder", () => {
       },
     },
   };
-  const cfg = {
+  const cfg: OpenClawConfig = {
     auth: {
       profiles: {
         "anthropic:default": { provider: "anthropic", mode: "api_key" },
@@ -51,7 +52,7 @@ describe("resolveAuthProfileOrder", () => {
             minimax: ["minimax:default", "minimax:prod"],
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -74,7 +75,7 @@ describe("resolveAuthProfileOrder", () => {
             minimax: ["openai:default", "minimax:prod"],
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -102,7 +103,7 @@ describe("resolveAuthProfileOrder", () => {
             minimax: ["minimax:default"],
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -125,7 +126,7 @@ describe("resolveAuthProfileOrder", () => {
             minimax: ["minimax:default"],
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {
@@ -149,7 +150,7 @@ describe("resolveAuthProfileOrder", () => {
             anthropic: ["anthropic:oauth"],
           },
         },
-      },
+      } as OpenClawConfig,
       store: {
         version: 1,
         profiles: {

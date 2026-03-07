@@ -8,8 +8,6 @@ import {
   countMissPatterns,
   extractExistingCriticalRules,
   promoteMissPatterns,
-  type EntryFormat,
-  type PruneResult,
 } from "./diary-archive.js";
 
 // ---------------------------------------------------------------------------
@@ -106,7 +104,7 @@ describe("extractEntries", () => {
 
   it("parses scratchpad entries (h3Date format)", () => {
     const content = SCRATCHPAD_HEADER + scratchpadEntry(1) + scratchpadEntry(2);
-    const { header, entries } = extractEntries(content, "h3Date");
+    const { entries } = extractEntries(content, "h3Date");
 
     expect(entries).toHaveLength(2);
     expect(entries[0]).toContain("2026-03-01");
@@ -151,9 +149,7 @@ describe("pruneMemoryFileIfNeeded", () => {
 
   it("prunes diary.md when over threshold", async () => {
     // Generate 20 entries, each ~500 bytes, with a low threshold
-    const entries = Array.from({ length: 20 }, (_, i) =>
-      diaryEntry(i + 1, "A".repeat(400)),
-    );
+    const entries = Array.from({ length: 20 }, (_, i) => diaryEntry(i + 1, "A".repeat(400)));
     const content = DIARY_HEADER + entries.join("");
     const filePath = path.join(tmpDir, "memory", "diary.md");
     await fs.writeFile(filePath, content);
@@ -209,21 +205,14 @@ describe("pruneMemoryFileIfNeeded", () => {
     const filePath = path.join(tmpDir, "memory", "identity-scratchpad.md");
     await fs.writeFile(filePath, content);
 
-    const result = await pruneMemoryFileIfNeeded(
-      tmpDir,
-      "memory/identity-scratchpad.md",
-      1,
-      4,
-    );
+    const result = await pruneMemoryFileIfNeeded(tmpDir, "memory/identity-scratchpad.md", 1, 4);
 
     expect(result.pruned).toBe(true);
     expect(result.entriesMoved).toBe(8);
   });
 
   it("preserves header after pruning", async () => {
-    const entries = Array.from({ length: 8 }, (_, i) =>
-      diaryEntry(i + 1, "X".repeat(200)),
-    );
+    const entries = Array.from({ length: 8 }, (_, i) => diaryEntry(i + 1, "X".repeat(200)));
     const content = DIARY_HEADER + entries.join("");
     const filePath = path.join(tmpDir, "memory", "diary.md");
     await fs.writeFile(filePath, content);
@@ -259,9 +248,7 @@ describe("pruneMemoryFileIfNeeded", () => {
     await fs.writeFile(overflowPath, "### 2026-02-28 — Old overflow entry\n\nPrevious overflow.\n");
 
     // Create a file that needs pruning
-    const entries = Array.from({ length: 10 }, (_, i) =>
-      diaryEntry(i + 1, "D".repeat(200)),
-    );
+    const entries = Array.from({ length: 10 }, (_, i) => diaryEntry(i + 1, "D".repeat(200)));
     const filePath = path.join(tmpDir, "memory", "diary.md");
     await fs.writeFile(filePath, DIARY_HEADER + entries.join(""));
 
@@ -343,10 +330,7 @@ describe("promoteMissPatterns", () => {
 [2026-03-02] MISS: Same thing — FIX: Always verify API health before operations
 [2026-03-03] MISS: Again — FIX: Always verify API health before operations
 `;
-    await fs.writeFile(
-      path.join(tmpDir, "memory", "self-review.md"),
-      selfReview,
-    );
+    await fs.writeFile(path.join(tmpDir, "memory", "self-review.md"), selfReview);
 
     // Create identity without CRITICAL section
     const identity = `# IDENTITY.md\n\n## How You Work\n\n- Does stuff\n`;
@@ -359,10 +343,7 @@ describe("promoteMissPatterns", () => {
     expect(result.promotedFixes[0]).toContain("verify api health");
 
     // Verify IDENTITY.md was updated
-    const updatedIdentity = await fs.readFile(
-      path.join(tmpDir, "IDENTITY.md"),
-      "utf-8",
-    );
+    const updatedIdentity = await fs.readFile(path.join(tmpDir, "IDENTITY.md"), "utf-8");
     expect(updatedIdentity).toContain("CRITICAL Rules");
     expect(updatedIdentity).toContain("CRITICAL:");
     expect(updatedIdentity).toContain("verify api health");
@@ -373,10 +354,7 @@ describe("promoteMissPatterns", () => {
 [2026-03-01] MISS: Failed — FIX: Always verify API health before operations
 [2026-03-02] MISS: Again — FIX: Always verify API health before operations
 `;
-    await fs.writeFile(
-      path.join(tmpDir, "memory", "self-review.md"),
-      selfReview,
-    );
+    await fs.writeFile(path.join(tmpDir, "memory", "self-review.md"), selfReview);
     await fs.writeFile(path.join(tmpDir, "IDENTITY.md"), "# IDENTITY\n");
 
     const result = await promoteMissPatterns(tmpDir, 3);
@@ -389,10 +367,7 @@ describe("promoteMissPatterns", () => {
 [2026-03-02] MISS: x — FIX: Always verify API health before operations
 [2026-03-03] MISS: x — FIX: Always verify API health before operations
 `;
-    await fs.writeFile(
-      path.join(tmpDir, "memory", "self-review.md"),
-      selfReview,
-    );
+    await fs.writeFile(path.join(tmpDir, "memory", "self-review.md"), selfReview);
 
     const identity = `# IDENTITY\n\n## CRITICAL Rules\n\n- **CRITICAL:** Always verify API health before operations\n`;
     await fs.writeFile(path.join(tmpDir, "IDENTITY.md"), identity);
@@ -407,10 +382,7 @@ describe("promoteMissPatterns", () => {
 [2026-03-02] MISS: x — FIX: Check file existence before reading it
 [2026-03-03] MISS: x — FIX: Check file existence before reading it
 `;
-    await fs.writeFile(
-      path.join(tmpDir, "memory", "self-review.md"),
-      selfReview,
-    );
+    await fs.writeFile(path.join(tmpDir, "memory", "self-review.md"), selfReview);
 
     const identity = `# IDENTITY\n\n## CRITICAL Rules\n\n- **CRITICAL:** Existing rule about something\n\n## How You Work\n`;
     await fs.writeFile(path.join(tmpDir, "IDENTITY.md"), identity);
@@ -418,10 +390,7 @@ describe("promoteMissPatterns", () => {
     const result = await promoteMissPatterns(tmpDir, 3);
     expect(result.promoted).toBe(1);
 
-    const updatedIdentity = await fs.readFile(
-      path.join(tmpDir, "IDENTITY.md"),
-      "utf-8",
-    );
+    const updatedIdentity = await fs.readFile(path.join(tmpDir, "IDENTITY.md"), "utf-8");
     expect(updatedIdentity).toContain("Existing rule about something");
     expect(updatedIdentity).toContain("file existence");
   });
@@ -447,10 +416,7 @@ MISS: x — FIX: Always verify the API health status before calling
 MISS: x — FIX: Always verify the API health status before calling
 MISS: x — FIX: Always verify the API health status before calling
 `;
-    await fs.writeFile(
-      path.join(tmpDir, "memory", "self-review.md"),
-      selfReview,
-    );
+    await fs.writeFile(path.join(tmpDir, "memory", "self-review.md"), selfReview);
 
     // Existing rule is similar but not identical
     const identity = `# IDENTITY\n\n## CRITICAL Rules\n\n- **CRITICAL:** Always verify API health before calling endpoints\n`;

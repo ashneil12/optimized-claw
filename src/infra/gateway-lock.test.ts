@@ -12,9 +12,6 @@ import { acquireGatewayLock, GatewayLockError, type GatewayLockOptions } from ".
 let fixtureRoot = "";
 let fixtureCount = 0;
 
-let fixtureRoot = "";
-let fixtureCount = 0;
-
 async function makeEnv() {
   const dir = path.join(fixtureRoot, `case-${fixtureCount++}`);
   await fs.mkdir(dir, { recursive: true });

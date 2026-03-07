@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { resetProcessRegistryForTests } from "./bash-process-registry";
+import { resetProcessRegistryForTests } from "./bash-process-registry.js";
 
 afterEach(() => {
   resetProcessRegistryForTests();
@@ -16,7 +16,7 @@ test("exec falls back when PTY spawn fails", async () => {
     },
   }));
 
-  const { createExecTool } = await import("./bash-tools.exec");
+  const { createExecTool } = await import("./bash-tools.exec.js");
   const tool = createExecTool({ allowBackground: false });
   const result = await tool.execute("toolcall", {
     command: "printf ok",
@@ -24,7 +24,7 @@ test("exec falls back when PTY spawn fails", async () => {
   });
 
   expect(result.details.status).toBe("completed");
-  const text = result.content?.[0]?.text ?? "";
+  const text = result.content?.find((item) => item.type === "text")?.text ?? "";
   expect(text).toContain("ok");
   expect(text).toContain("PTY spawn failed");
 });

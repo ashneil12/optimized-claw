@@ -17,7 +17,7 @@ import {
   CHROME_STOP_TIMEOUT_MS,
   CHROME_WS_READY_TIMEOUT_MS,
 } from "./cdp-timeouts.js";
-import { appendCdpPath, fetchCdpChecked, openCdpWebSocket } from "./cdp.helpers.js";
+import { appendCdpPath, fetchJson, openCdpWebSocket } from "./cdp.helpers.js";
 import { normalizeCdpWsUrl } from "./cdp.js";
 import {
   type BrowserExecutable,
@@ -160,12 +160,9 @@ async function fetchChromeVersion(
   cdpUrl: string,
   timeoutMs = CHROME_REACHABILITY_TIMEOUT_MS,
 ): Promise<ChromeVersion | null> {
-  const ctrl = new AbortController();
-  const _t = setTimeout(ctrl.abort.bind(ctrl), timeoutMs);
   try {
     const versionUrl = appendCdpPath(cdpUrl, "/json/version");
-    const res = await fetchCdpChecked(versionUrl, timeoutMs, { signal: ctrl.signal });
-    const data = (await res.json()) as ChromeVersion;
+    const data = await fetchJson<ChromeVersion>(versionUrl, timeoutMs);
     if (!data || typeof data !== "object") {
       return null;
     }

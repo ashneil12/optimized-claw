@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAuthProfileOrder } from "./auth-profiles.js";
+import { resolveAuthProfileOrder, type AuthProfileStore } from "./auth-profiles.js";
 
 describe("resolveAuthProfileOrder", () => {
   const _store: AuthProfileStore = {

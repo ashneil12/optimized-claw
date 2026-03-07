@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "./server-context.chrome-test-harness.js";
 import * as chromeModule from "./chrome.js";
 import * as pwAiModule from "./pw-ai-module.js";
+import { PROFILE_STATUS_TAB_LIST_TIMEOUT_MS } from "./server-context.constants.js";
 import { createBrowserRouteContext } from "./server-context.js";
 import {
   createJsonListFetchMock,
@@ -209,6 +210,30 @@ describe("browser server-context remote profile tab operations", () => {
 
     await expect(remote.listTabs()).rejects.toThrow(/boom/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("bounds remote tab listing during profile status enumeration", async () => {
+    vi.useFakeTimers();
+    vi.mocked(chromeModule.isChromeReachable).mockResolvedValue(true);
+    vi.spyOn(pwAiModule, "getPwAiModule").mockResolvedValue({
+      listPagesViaPlaywright: vi.fn(() => new Promise(() => {})),
+    } as unknown as Awaited<ReturnType<typeof pwAiModule.getPwAiModule>>);
+
+    const state = makeState("remote");
+    const ctx = createBrowserRouteContext({ getState: () => state });
+
+    const promise = ctx.listProfiles();
+    await vi.advanceTimersByTimeAsync(PROFILE_STATUS_TAB_LIST_TIMEOUT_MS + 25);
+
+    await expect(promise).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "remote",
+          running: true,
+          tabCount: 0,
+        }),
+      ]),
+    );
   });
 
   it("falls back to /json/list when Playwright is not available", async () => {
