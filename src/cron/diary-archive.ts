@@ -1,13 +1,21 @@
 /**
- * Deterministic diary archive — moves `memory/diary.md` and
- * `memory/identity-scratchpad.md` to `memory/archive/YYYY-MM/` and
- * resets them to clean templates.  The new `diary.md` is seeded with a
- * raw excerpt (last ~30 lines) from the old diary plus a marker
- * pointing to the full archive, giving the agent some continuity even
- * before the LLM `diary-post-archive` enrichment job runs.
+ * Deterministic diary archive & memory pruning.
+ *
+ * Two complementary mechanisms keep agent memory files manageable:
+ *
+ * 1. **Full archive** (default every 14 days): moves `memory/diary.md`,
+ *    `memory/identity-scratchpad.md`, and `memory/self-review.md` to
+ *    `memory/archive/YYYY-MM/` and resets them to clean templates.  The
+ *    new `diary.md` is seeded with a raw excerpt (last ~30 lines) from
+ *    the old diary plus a marker pointing to the full archive.
+ *
+ * 2. **Size-triggered pruning** (checked every tick): if any memory file
+ *    exceeds {@link MAX_MEMORY_FILE_BYTES} (30 KB), the oldest entries
+ *    are moved to an overflow archive, keeping only the most recent
+ *    {@link MAX_ENTRIES_TO_KEEP} entries in the hot file.  This prevents
+ *    files from growing large enough to cause LLM edit failures.
  *
  * Lifecycle: started alongside the CronService in `server-cron.ts`.
- * Fires on a configurable interval (default 14 days).
  */
 
 import type { Dirent } from "node:fs";
@@ -35,10 +43,22 @@ const EXCERPT_TAIL_LINES = 30;
 
 const DIARY_RELATIVE_PATH = "memory/diary.md";
 const SCRATCHPAD_RELATIVE_PATH = "memory/identity-scratchpad.md";
+const SELF_REVIEW_RELATIVE_PATH = "memory/self-review.md";
 const ARCHIVE_STATE_FILENAME = ".diary-archive-state.json";
 
 /** Downloads older than this are pruned from the agent workspace downloads/ folder. */
 const DOWNLOADS_PRUNE_AFTER_MS = 10 * 24 * 60 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// Size-triggered pruning constants
+// ---------------------------------------------------------------------------
+
+/** Prune a memory file once it exceeds this size.  30 KB keeps files
+ *  comfortably within LLM edit-tool reliability bounds. */
+export const MAX_MEMORY_FILE_BYTES = 30 * 1024;
+
+/** How many most-recent entries to retain in the hot file after pruning. */
+export const MAX_ENTRIES_TO_KEEP = 15;
 
 // ---------------------------------------------------------------------------
 // Download pruning
@@ -80,6 +100,404 @@ async function pruneOldDownloads(
   if (pruned > 0) {
     log.info(`diary-archive: pruned ${pruned} old download(s) from ${downloadsDir}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Entry parsing for size-triggered pruning
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes how entries are delimited in a particular memory file.
+ * - `h3Date`: entries start with `### YYYY-MM-DD` (diary, scratchpad)
+ * - `bracketDate`: entries start with `[YYYY-MM-DD` (self-review)
+ */
+export type EntryFormat = "h3Date" | "bracketDate";
+
+const ENTRY_FORMAT_MAP: Record<string, EntryFormat> = {
+  [DIARY_RELATIVE_PATH]: "h3Date",
+  [SCRATCHPAD_RELATIVE_PATH]: "h3Date",
+  [SELF_REVIEW_RELATIVE_PATH]: "bracketDate",
+};
+
+/** Regex that matches the start of a new entry for each format. */
+const ENTRY_START_REGEX: Record<EntryFormat, RegExp> = {
+  h3Date: /^### \d{4}-\d{2}-\d{2}/,
+  bracketDate: /^\[\d{4}-\d{2}-\d{2}/,
+};
+
+/**
+ * Split file content into a header (template / preamble before the first
+ * entry) and an ordered list of entry strings.  Each entry includes its
+ * delimiter line and all subsequent lines until the next entry or EOF.
+ */
+export function extractEntries(
+  content: string,
+  format: EntryFormat,
+): { header: string; entries: string[] } {
+  const lines = content.split("\n");
+  const regex = ENTRY_START_REGEX[format];
+
+  let firstEntryIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (regex.test(lines[i])) {
+      firstEntryIdx = i;
+      break;
+    }
+  }
+
+  if (firstEntryIdx === -1) {
+    // No entries found — entire content is header
+    return { header: content, entries: [] };
+  }
+
+  const header = lines.slice(0, firstEntryIdx).join("\n");
+
+  // Split remaining lines into entries
+  const entries: string[] = [];
+  let currentEntry: string[] = [];
+
+  for (let i = firstEntryIdx; i < lines.length; i++) {
+    if (regex.test(lines[i]) && currentEntry.length > 0) {
+      entries.push(currentEntry.join("\n"));
+      currentEntry = [];
+    }
+    currentEntry.push(lines[i]);
+  }
+  if (currentEntry.length > 0) {
+    entries.push(currentEntry.join("\n"));
+  }
+
+  return { header, entries };
+}
+
+// ---------------------------------------------------------------------------
+// Size-triggered pruning
+// ---------------------------------------------------------------------------
+
+export type PruneResult = {
+  /** Relative path of the file that was checked. */
+  file: string;
+  /** Whether pruning actually occurred. */
+  pruned: boolean;
+  /** Number of entries moved to the overflow archive. */
+  entriesMoved: number;
+  /** Overflow archive path (if written). */
+  overflowPath?: string;
+};
+
+/**
+ * Check a single memory file.  If it exceeds {@link MAX_MEMORY_FILE_BYTES},
+ * keep only the last {@link MAX_ENTRIES_TO_KEEP} entries and archive the
+ * rest to `memory/archive/YYYY-MM/{type}-overflow-{date}.md`.
+ */
+export async function pruneMemoryFileIfNeeded(
+  workspaceDir: string,
+  relativePath: string,
+  maxBytes: number = MAX_MEMORY_FILE_BYTES,
+  maxEntries: number = MAX_ENTRIES_TO_KEEP,
+): Promise<PruneResult> {
+  const filePath = path.join(workspaceDir, relativePath);
+  const result: PruneResult = { file: relativePath, pruned: false, entriesMoved: 0 };
+
+  // 1. Check file size
+  let stat;
+  try {
+    stat = await fs.stat(filePath);
+  } catch {
+    return result; // File doesn't exist
+  }
+  if (stat.size <= maxBytes) {
+    return result; // Under threshold
+  }
+
+  // 2. Read and parse entries
+  const format = ENTRY_FORMAT_MAP[relativePath];
+  if (!format) {
+    log.warn(`memory-prune: unknown entry format for ${relativePath}, skipping`);
+    return result;
+  }
+
+  const content = await fs.readFile(filePath, "utf-8");
+  const { header, entries } = extractEntries(content, format);
+
+  if (entries.length <= maxEntries) {
+    // Not enough entries to prune — file is big but not entry-dense.
+    // This can happen if entries are very long.  We still log it.
+    log.info(
+      `memory-prune: ${relativePath} is ${Math.round(stat.size / 1024)}KB ` +
+        `but only has ${entries.length} entries (threshold: ${maxEntries}), skipping`,
+    );
+    return result;
+  }
+
+  // 3. Split into cold (to archive) and hot (to keep)
+  const coldEntries = entries.slice(0, entries.length - maxEntries);
+  const hotEntries = entries.slice(entries.length - maxEntries);
+
+  // 4. Write cold entries to overflow archive
+  const now = new Date();
+  const archiveSubdir = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
+  const dateSuffix = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}-${now.getDate().toString().padStart(2, "0")}`;
+  const archiveDir = path.join(workspaceDir, "memory", "archive", archiveSubdir);
+  await fs.mkdir(archiveDir, { recursive: true });
+
+  // Derive basename: memory/diary.md → diary, memory/self-review.md → self-review
+  const baseName = path.basename(relativePath, ".md");
+  const overflowName = `${baseName}-overflow-${dateSuffix}.md`;
+  const overflowPath = path.join(archiveDir, overflowName);
+
+  // If an overflow file already exists today, append to it
+  let existingOverflow = "";
+  try {
+    existingOverflow = await fs.readFile(overflowPath, "utf-8");
+    if (!existingOverflow.endsWith("\n")) {
+      existingOverflow += "\n";
+    }
+  } catch {
+    // No existing overflow — start fresh
+  }
+
+  const overflowContent = existingOverflow + coldEntries.join("\n") + "\n";
+  const tmpOverflow = `${overflowPath}.tmp-${process.pid}-${Date.now().toString(36)}`;
+  try {
+    await fs.writeFile(tmpOverflow, overflowContent, "utf-8");
+    await fs.rename(tmpOverflow, overflowPath);
+  } catch (err) {
+    await fs.unlink(tmpOverflow).catch(() => {});
+    throw err;
+  }
+
+  // 5. Rewrite hot file: header + retained entries
+  const hotContent = header + (header.endsWith("\n") ? "" : "\n") + hotEntries.join("\n") + "\n";
+  const tmpHot = `${filePath}.tmp-${process.pid}-${Date.now().toString(36)}`;
+  try {
+    await fs.writeFile(tmpHot, hotContent, "utf-8");
+    await fs.rename(tmpHot, filePath);
+  } catch (err) {
+    await fs.unlink(tmpHot).catch(() => {});
+    throw err;
+  }
+
+  result.pruned = true;
+  result.entriesMoved = coldEntries.length;
+  result.overflowPath = overflowPath;
+
+  log.info(
+    `memory-prune: pruned ${relativePath} — moved ${coldEntries.length} entries to ` +
+      `${path.relative(workspaceDir, overflowPath)}, kept ${hotEntries.length}`,
+  );
+
+  return result;
+}
+
+/**
+ * Run the size-triggered pruner on all three memory files for a workspace.
+ * This is cheap to call repeatedly — it no-ops when files are small.
+ */
+export async function runMemoryPruneForWorkspace(
+  workspaceDir: string,
+): Promise<PruneResult[]> {
+  const results: PruneResult[] = [];
+  for (const relPath of [DIARY_RELATIVE_PATH, SCRATCHPAD_RELATIVE_PATH, SELF_REVIEW_RELATIVE_PATH]) {
+    try {
+      results.push(await pruneMemoryFileIfNeeded(workspaceDir, relPath));
+    } catch (err) {
+      log.warn(`memory-prune: failed to prune ${relPath} in ${workspaceDir}: ${String(err)}`);
+      results.push({ file: relPath, pruned: false, entriesMoved: 0 });
+    }
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic MISS → CRITICAL promotion (Fix 1)
+// ---------------------------------------------------------------------------
+
+const IDENTITY_RELATIVE_PATH = "IDENTITY.md";
+
+/** Minimum number of MISS occurrences with the same FIX before auto-promotion. */
+export const MISS_PROMOTION_THRESHOLD = 3;
+
+export type MissPromotionResult = {
+  /** Number of new CRITICAL rules added to IDENTITY.md. */
+  promoted: number;
+  /** The FIX texts that were promoted. */
+  promotedFixes: string[];
+};
+
+/**
+ * Extract MISS entries with their FIX text from self-review.md content.
+ * Returns a map of normalized FIX text → occurrence count.
+ */
+export function countMissPatterns(selfReviewContent: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  // Match lines like: MISS: ... FIX: <concrete fix text>
+  // or: MISS: ... — FIX: <concrete fix text>
+  const missFixRegex = /MISS:.*?(?:—\s*)?FIX:\s*(.+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = missFixRegex.exec(selfReviewContent)) !== null) {
+    // Normalize: trim, lowercase, collapse whitespace
+    const fix = match[1].trim().toLowerCase().replace(/\s+/g, " ");
+    if (fix.length > 10) {
+      // Skip trivially short FIX texts
+      counts.set(fix, (counts.get(fix) ?? 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+/**
+ * Extract existing CRITICAL rules from IDENTITY.md content.
+ * Returns them as normalized lowercase strings for dedup comparison.
+ */
+export function extractExistingCriticalRules(identityContent: string): Set<string> {
+  const rules = new Set<string>();
+  // Match both plain "CRITICAL:" and markdown "**CRITICAL:**" variants
+  const criticalRegex = /\*{0,2}CRITICAL:?\*{0,2}\s*(.+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = criticalRegex.exec(identityContent)) !== null) {
+    // Strip any remaining markdown bold markers from the captured text
+    const cleaned = match[1].replace(/\*{2}/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (cleaned.length > 0) {
+      rules.add(cleaned);
+    }
+  }
+
+  return rules;
+}
+
+/**
+ * Deterministically scan self-review.md for MISS patterns that have hit
+ * the promotion threshold.  For each qualifying pattern, append a
+ * `CRITICAL:` rule to IDENTITY.md if not already present.
+ *
+ * This is the machine-enforced backstop: even if the LLM fails to
+ * self-promote during its cron sessions, this function will do it.
+ */
+export async function promoteMissPatterns(
+  workspaceDir: string,
+  threshold: number = MISS_PROMOTION_THRESHOLD,
+): Promise<MissPromotionResult> {
+  const result: MissPromotionResult = { promoted: 0, promotedFixes: [] };
+
+  const selfReviewPath = path.join(workspaceDir, SELF_REVIEW_RELATIVE_PATH);
+  const identityPath = path.join(workspaceDir, IDENTITY_RELATIVE_PATH);
+
+  // Read self-review
+  let selfReviewContent: string;
+  try {
+    selfReviewContent = await fs.readFile(selfReviewPath, "utf-8");
+  } catch {
+    return result; // No self-review file
+  }
+
+  // Read identity
+  let identityContent: string;
+  try {
+    identityContent = await fs.readFile(identityPath, "utf-8");
+  } catch {
+    return result; // No identity file
+  }
+
+  // Count MISS patterns
+  const missCounts = countMissPatterns(selfReviewContent);
+  const existingRules = extractExistingCriticalRules(identityContent);
+
+  // Find patterns that qualify for promotion
+  const toPromote: string[] = [];
+  for (const [fix, count] of missCounts) {
+    if (count >= threshold && !existingRules.has(fix)) {
+      // Check if any existing rule is substantially similar (contains the key parts)
+      const alreadyCovered = [...existingRules].some((existing) => {
+        // Simple overlap check: if 60%+ of words match, consider it covered
+        const fixWords = new Set(fix.split(" ").filter((w) => w.length > 3));
+        const existingWords = new Set(existing.split(" ").filter((w) => w.length > 3));
+        if (fixWords.size === 0) return false;
+        let overlap = 0;
+        for (const word of fixWords) {
+          if (existingWords.has(word)) overlap++;
+        }
+        return overlap / fixWords.size > 0.6;
+      });
+
+      if (!alreadyCovered) {
+        // Capitalize first letter for the CRITICAL rule
+        const capitalizedFix = fix.charAt(0).toUpperCase() + fix.slice(1);
+        toPromote.push(capitalizedFix);
+      }
+    }
+  }
+
+  if (toPromote.length === 0) {
+    return result;
+  }
+
+  // Append CRITICAL rules to IDENTITY.md
+  // Find or create the "## CRITICAL Rules" section
+  const criticalSectionHeader = "## CRITICAL Rules";
+  let newIdentityContent: string;
+
+  if (identityContent.includes(criticalSectionHeader) || identityContent.includes("## Critical Rules")) {
+    // Append after the existing section header
+    const insertPoint = identityContent.includes(criticalSectionHeader)
+      ? criticalSectionHeader
+      : "## Critical Rules";
+    const idx = identityContent.indexOf(insertPoint);
+    const afterHeader = idx + insertPoint.length;
+    // Find the end of the line
+    const lineEnd = identityContent.indexOf("\n", afterHeader);
+    const insertIdx = lineEnd === -1 ? identityContent.length : lineEnd;
+
+    const newRules = toPromote
+      .map((fix) => `\n- **CRITICAL:** ${fix}`)
+      .join("");
+
+    newIdentityContent =
+      identityContent.slice(0, insertIdx) +
+      newRules +
+      identityContent.slice(insertIdx);
+  } else {
+    // Create new CRITICAL Rules section before the first ## section or at end
+    const newSection =
+      `\n\n${criticalSectionHeader}\n` +
+      toPromote.map((fix) => `\n- **CRITICAL:** ${fix}`).join("") +
+      "\n";
+
+    // Try to insert before "## How You Work" or "## Personal Preferences" or append
+    const insertBefore = identityContent.indexOf("## How You Work");
+    if (insertBefore !== -1) {
+      newIdentityContent =
+        identityContent.slice(0, insertBefore) +
+        newSection +
+        "\n" +
+        identityContent.slice(insertBefore);
+    } else {
+      newIdentityContent = identityContent + newSection;
+    }
+  }
+
+  // Atomic write
+  const tmpPath = `${identityPath}.tmp-${process.pid}-${Date.now().toString(36)}`;
+  try {
+    await fs.writeFile(tmpPath, newIdentityContent, "utf-8");
+    await fs.rename(tmpPath, identityPath);
+  } catch (err) {
+    await fs.unlink(tmpPath).catch(() => {});
+    throw err;
+  }
+
+  result.promoted = toPromote.length;
+  result.promotedFixes = toPromote;
+
+  log.info(
+    `miss-promotion: promoted ${toPromote.length} MISS pattern(s) to CRITICAL in ` +
+      `${path.basename(workspaceDir)}/IDENTITY.md: ${toPromote.join("; ")}`,
+  );
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +550,9 @@ async function loadTemplateContent(relativePath: string): Promise<string> {
     if (relativePath.includes("diary")) {
       return "# Diary\n\n> Your reflective journal. Updated by the diary cron job.\n";
     }
+    if (relativePath.includes("self-review")) {
+      return "# Self-Review Log\n\n> Read on boot. Log mistakes (MISS) and successes (HIT).\n> If same MISS appears 3x, promote to CRITICAL rule.\n";
+    }
     return "# Identity Scratchpad\n\n> Document reasoning behind identity changes here.\n> Archived every 2 weeks alongside the diary.\n";
   }
 }
@@ -144,6 +565,7 @@ export type DiaryArchiveResult = {
   workspaceDir: string;
   diaryArchived: boolean;
   scratchpadArchived: boolean;
+  selfReviewArchived: boolean;
   archivePath?: string;
   error?: string;
 };
@@ -165,11 +587,13 @@ export async function runDiaryArchiveForWorkspace(
   const archiveDir = path.join(workspaceDir, "memory", "archive", archiveSubdir);
   const diaryPath = path.join(workspaceDir, DIARY_RELATIVE_PATH);
   const scratchpadPath = path.join(workspaceDir, SCRATCHPAD_RELATIVE_PATH);
+  const selfReviewPath = path.join(workspaceDir, SELF_REVIEW_RELATIVE_PATH);
 
   const result: DiaryArchiveResult = {
     workspaceDir,
     diaryArchived: false,
     scratchpadArchived: false,
+    selfReviewArchived: false,
   };
 
   // Read existing diary content before archiving
@@ -256,6 +680,40 @@ export async function runDiaryArchiveForWorkspace(
     log.info(`diary-archive: reset identity-scratchpad to template`);
   }
 
+  // Archive self-review.md
+  try {
+    const selfReviewContent = await fs.readFile(selfReviewPath, "utf-8");
+    const selfReviewTemplate = await loadTemplateContent("memory/self-review.md");
+    const selfReviewHasContent =
+      selfReviewContent.trim().length > 0 &&
+      selfReviewContent.trim() !== selfReviewTemplate.trim();
+
+    if (selfReviewHasContent) {
+      const archiveSelfReviewName = `self-review-${dateSuffix}.md`;
+      const archiveSelfReviewPath = path.join(archiveDir, archiveSelfReviewName);
+
+      try {
+        await fs.access(archiveSelfReviewPath);
+        log.info(
+          `diary-archive: self-review archive already exists at ${archiveSelfReviewPath}, skipping`,
+        );
+      } catch {
+        await fs.writeFile(archiveSelfReviewPath, selfReviewContent, "utf-8");
+        result.selfReviewArchived = true;
+        log.info(`diary-archive: archived self-review → ${archiveSelfReviewPath}`);
+      }
+    }
+  } catch {
+    // Self-review missing is fine — not an error
+  }
+
+  // Reset self-review to template
+  if (result.selfReviewArchived) {
+    const selfReviewTemplate = await loadTemplateContent("memory/self-review.md");
+    await fs.writeFile(selfReviewPath, selfReviewTemplate, "utf-8");
+    log.info(`diary-archive: reset self-review to template`);
+  }
+
   // Update state
   await writeArchiveState(workspaceDir, { lastArchiveAtMs: Date.now() });
 
@@ -313,7 +771,9 @@ export function buildNewDiary(template: string, archiveRef: string, excerpt: str
 // ---------------------------------------------------------------------------
 
 /**
- * Run diary archive for all agent workspaces that are due.
+ * Run diary archive for all agent workspaces that are due, and run
+ * the size-triggered memory pruner on **every** workspace regardless
+ * of whether a full archive is due.
  */
 export async function runDiaryArchiveSweep(
   cfg: OpenClawConfig,
@@ -332,10 +792,24 @@ export async function runDiaryArchiveSweep(
       continue; // Workspace doesn't exist, skip
     }
 
-    // Check if archive is due
+    // ── Size-triggered pruning (every tick, cheap no-op when small) ──
+    await runMemoryPruneForWorkspace(workspaceDir).catch((err) =>
+      log.warn(`memory-prune: sweep failed for ${workspaceDir}: ${String(err)}`),
+    );
+
+    // ── Deterministic MISS → CRITICAL promotion (every tick, cheap scan) ──
+    await promoteMissPatterns(workspaceDir).catch((err) =>
+      log.warn(`miss-promotion: sweep failed for ${workspaceDir}: ${String(err)}`),
+    );
+
+    // ── Full archive (time-gated) ──
     const state = await readArchiveState(workspaceDir);
     if (state.lastArchiveAtMs && nowMs - state.lastArchiveAtMs < intervalMs) {
-      continue; // Not due yet
+      // Not due for full archive — still do download pruning
+      await pruneOldDownloads(workspaceDir).catch((err) =>
+        log.warn(`diary-archive: download prune failed for ${workspaceDir}: ${String(err)}`),
+      );
+      continue;
     }
 
     try {
@@ -347,6 +821,7 @@ export async function runDiaryArchiveSweep(
         workspaceDir,
         diaryArchived: false,
         scratchpadArchived: false,
+        selfReviewArchived: false,
         error: String(err),
       });
     }

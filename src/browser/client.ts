@@ -112,7 +112,7 @@ export async function browserProfiles(baseUrl?: string): Promise<ProfileStatus[]
   const res = await fetchBrowserJson<{ profiles: ProfileStatus[] }>(
     withBaseUrl(baseUrl, `/profiles`),
     {
-      timeoutMs: 3000,
+      timeoutMs: 5000,
     },
   );
   return res.profiles ?? [];

@@ -2,6 +2,7 @@
 
 > Read on boot. Log mistakes (MISS) and successes (HIT).
 > If same MISS appears 3x, promote to CRITICAL rule.
+> Older entries are archived automatically to `memory/archive/`.
 
 ---
 

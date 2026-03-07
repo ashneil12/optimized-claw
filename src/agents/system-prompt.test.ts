@@ -660,6 +660,26 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("## Reactions");
     expect(prompt).toContain("Reactions are enabled for Telegram in MINIMAL mode.");
   });
+  it("includes browser auto-download guidance when browser tool is available", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["web_search", "browser"],
+    });
+
+    expect(prompt).toContain("Browser downloads are automatic");
+    expect(prompt).toContain("/tmp/openclaw/downloads/");
+    expect(prompt).toContain("pruned after 10 days");
+  });
+
+  it("omits browser auto-download guidance in minimal mode", () => {
+    const prompt = buildAgentSystemPrompt({
+      workspaceDir: "/tmp/openclaw",
+      toolNames: ["web_search", "browser"],
+      promptMode: "minimal",
+    });
+
+    expect(prompt).not.toContain("Browser downloads are automatic");
+  });
 });
 
 describe("buildSubagentSystemPrompt", () => {

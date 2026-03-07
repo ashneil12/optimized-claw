@@ -824,10 +824,22 @@ const MAIN_ONLY_JOBS = new Set([
 
 /**
  * Agents that should receive specific main-only jobs.
- * Format: agentId → Set of job names to INCLUDE (overriding MAIN_ONLY_JOBS exclusion).
+ * Format: agentId → { include: Set of job names, deliveryOverrides: { jobName → delivery } }
+ *
+ * `include` overrides MAIN_ONLY_JOBS exclusion.
+ * `deliveryOverrides` lets you force a specific delivery config per-job
+ * (e.g. nightly-innovation → none for agents that shouldn't announce it).
  */
 const AGENT_ADVANCED_CRON_OVERRIDES = new Map([
-  ["jael", new Set(["nightly-innovation", "self-audit-21", "morning-briefing"])],
+  [
+    "jael",
+    {
+      include: new Set(["nightly-innovation", "self-audit-21", "morning-briefing"]),
+      deliveryOverrides: {
+        "nightly-innovation": { mode: "none" },
+      },
+    },
+  ],
 ]);
 
 function seedCronJobs(jobsFilePath, { excludeNames = new Set() } = {}) {
@@ -1730,6 +1742,32 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
  * - Workspace missing cron/jobs.json → seeded with defaults
  * - Reflection frequency changes → patched for all agents consistently
  */
+/**
+ * Resolve the announce delivery target for a sub-agent by looking up its
+ * credential store. Checks for `telegram-<agentId>-allowFrom.json` (the
+ * most common channel) and uses the first allowFrom ID as the delivery
+ * target. Returns `{ channel, to }` or `null` if no credential found.
+ */
+function resolveSubAgentAnnounceDelivery(dataDir, agentName) {
+  const credDir = `${dataDir}/credentials`;
+  // Try common channels in priority order
+  for (const channel of ["telegram", "discord", "whatsapp", "slack"]) {
+    const credFile = `${credDir}/${channel}-${agentName}-allowFrom.json`;
+    if (existsSync(credFile)) {
+      try {
+        const cred = readConfig(credFile);
+        const ids = cred.allowFrom || [];
+        if (ids.length > 0) {
+          return { channel, to: String(ids[0]) };
+        }
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
+  return null;
+}
+
 function seedSubAgentCronJobs(dataDir) {
   if (!dataDir || !existsSync(dataDir)) {
     return;
@@ -1761,8 +1799,9 @@ function seedSubAgentCronJobs(dataDir) {
     // - file exists → reflection interval patching only
     const existed = existsSync(jobsFile);
     const overrides = AGENT_ADVANCED_CRON_OVERRIDES.get(agentName);
-    const effectiveExcludes = overrides
-      ? new Set([...MAIN_ONLY_JOBS].filter((n) => !overrides.has(n)))
+    const includeSet = overrides?.include || overrides;  // back-compat: handle both old Set and new object format
+    const effectiveExcludes = includeSet instanceof Set
+      ? new Set([...MAIN_ONLY_JOBS].filter((n) => !includeSet.has(n)))
       : MAIN_ONLY_JOBS;
     seedCronJobs(jobsFile, { excludeNames: effectiveExcludes });
 
@@ -1771,6 +1810,66 @@ function seedSubAgentCronJobs(dataDir) {
       console.log(`[enforce-config] ✅ Seeded cron jobs for sub-agent: ${agentName}`);
     } else if (existed) {
       patched++;
+    }
+
+    // ── Post-seed fixes: delivery targets + duplicate cleanup ──────────
+    if (existsSync(jobsFile)) {
+      const store = readConfig(jobsFile);
+      if (!store.jobs || store.jobs.length === 0) continue;
+
+      let changed = false;
+
+      // 1. Remove agent-prefixed duplicate jobs from old seeding format.
+      //    e.g. "jael-self-review" when canonical "self-review" also exists.
+      const canonicalNames = new Set(store.jobs.filter((j) => !j.name.startsWith(`${agentName}-`)).map((j) => j.name));
+      const beforeCount = store.jobs.length;
+      store.jobs = store.jobs.filter((j) => {
+        if (!j.name.startsWith(`${agentName}-`)) return true;
+        const baseName = j.name.slice(agentName.length + 1);
+        if (canonicalNames.has(baseName)) {
+          console.log(`[enforce-config] Removed duplicate job '${j.name}' (canonical '${baseName}' exists)`);
+          return false;
+        }
+        return true;
+      });
+      if (store.jobs.length !== beforeCount) changed = true;
+
+      // 2. Patch announce-mode jobs with missing delivery targets.
+      //    Resolve from credential store so sub-agents get per-agent routing.
+      const deliveryOverrides = overrides?.deliveryOverrides || {};
+      const deliveryTarget = resolveSubAgentAnnounceDelivery(dataDir, agentName);
+
+      for (const job of store.jobs) {
+        // Apply per-job delivery overrides from AGENT_ADVANCED_CRON_OVERRIDES
+        if (deliveryOverrides[job.name]) {
+          const override = deliveryOverrides[job.name];
+          if (JSON.stringify(job.delivery) !== JSON.stringify(override)) {
+            job.delivery = { ...override };
+            console.log(`[enforce-config] Applied delivery override for '${job.name}' on agent '${agentName}': ${JSON.stringify(override)}`);
+            changed = true;
+          }
+          continue;
+        }
+
+        // Patch bare announce delivery (missing channel/to) from credential store
+        if (
+          job.delivery?.mode === "announce" &&
+          !job.delivery.channel &&
+          !job.delivery.to &&
+          deliveryTarget
+        ) {
+          job.delivery.channel = deliveryTarget.channel;
+          job.delivery.to = deliveryTarget.to;
+          console.log(
+            `[enforce-config] Patched delivery target for '${job.name}' on agent '${agentName}': ${deliveryTarget.channel} → ${deliveryTarget.to}`,
+          );
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        writeConfig(jobsFile, store);
+      }
     }
   }
 

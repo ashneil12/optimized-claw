@@ -5,6 +5,33 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Browser Control Resilience — Parallel Profiles, Health Checks & Auto-Restart (2026-03-06)
+
+**Purpose:** Fix intermittent "Can't reach the OpenClaw browser control service (timed out after 3000ms)" errors caused by serial profile checking, tight client timeouts, and unhealthy Chrome containers that Docker never restarted.
+
+### Code Changes (moltbotserver-source)
+
+| File | Change | Why |
+|------|--------|-----|
+| `src/browser/server-context.ts` | `listProfiles()` serial `for` loop → `Promise.all` + `.map()` | 7 profiles × ~500ms serial = 3.5s; parallel = ~500ms total |
+| `src/browser/client.ts` | `browserProfiles` timeout `3000` → `5000` | Safety margin for parallel checks + network latency |
+
+### Infrastructure Changes (moltbot-dashboard)
+
+| File | Change | Why |
+|------|--------|-----|
+| `hetzner-instance-service.ts` | Docker `healthcheck` (curl CDP every 30s, 3 retries) + `mem_limit: 512m` per browser container | Detect + prevent Chrome bloat |
+| `hetzner-instance-service.ts` | `browser-watchdog.sh` cron (every 5 min) | Auto-restart containers marked unhealthy |
+| `hetzner-instance-service.ts` | Fixed `pipefail`-incompatible `grep` for `OPENCLAW_SANDBOX_BROWSER_IMAGE` | `{ grep ... || true; }` pattern |
+
+### Upstream Sync Risk
+
+**Medium for `server-context.ts`** — the `listProfiles` function is actively maintained upstream. The change replaces the body of a `for` loop with `Promise.all`.
+**Low for `client.ts`** — single constant change (`3000` → `5000`).
+**None for dashboard** — `hetzner-instance-service.ts` is fully custom.
+
+---
+
 ## Managed Platform Mode Gating — Community Self-Hosting Support (2026-03-05)
 
 **Purpose:** Enable community users to self-host the enhanced OpenClaw fork with full security, while managed (OCS/MoltBot) deployments remain unaffected. Previously, SaaS-mode security bypasses (disabled device auth, auto-onboard, auto-approve device pairing) were hardcoded. Now they're gated behind `OPENCLAW_MANAGED_PLATFORM=1`, which the dashboard already injects via docker-compose.

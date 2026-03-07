@@ -15,6 +15,9 @@ grep -c 'CDP_PROXY_SCRIPT' scripts/sandbox-browser-entrypoint.sh  # expect ≥ 1
 grep -c 'cdp-host-proxy' Dockerfile.sandbox-browser                # expect ≥ 1
 grep -c 'prebaked-plugins' Dockerfile                              # expect ≥ 1
 grep -c 'handleSandboxBrowserRequest' src/gateway/server-http.ts   # expect ≥ 1
+grep -c 'agentId.*resolveSessionAgentId' src/agents/openclaw-tools.ts # expect ≥ 1
+grep -c 'Promise.all' src/browser/server-context.ts                # expect ≥ 1
+grep -c 'timeoutMs: 5000' src/browser/client.ts                   # expect ≥ 1
 ```
 
 ## Patched Files
@@ -94,3 +97,23 @@ browser) instead of their dedicated container.
 `createBrowserTool()` call, matching the pattern already used in `moltbot-tools.ts`.
 
 **How to verify**: `grep -c 'agentId.*resolveSessionAgentId' src/agents/openclaw-tools.ts`
+
+### 9. `src/browser/server-context.ts` — Parallel Profile Listing
+
+**Why**: `listProfiles()` iterated all browser profiles serially, making CDP reachability checks
+one-by-one. With 7 remote profiles × ~500ms per check, total time exceeded the client-side
+3000ms timeout, causing "Can't reach the OpenClaw browser control service" errors.
+
+**What**: Replaced the serial `for` loop with `Promise.all` + `.map()` pattern. All profile
+checks now run in parallel, reducing total time from O(n × timeout) to O(timeout).
+
+**How to verify**: `grep -c 'Promise.all' src/browser/server-context.ts`
+
+### 10. `src/browser/client.ts` — Browser Profiles Timeout Bump
+
+**Why**: The `browserProfiles` client call used a 3000ms timeout that was too tight for 7
+remote profiles, even with parallel checks and potential network latency.
+
+**What**: Increased `timeoutMs` from `3000` to `5000` for the `/profiles` endpoint.
+
+**How to verify**: `grep -c 'timeoutMs: 5000' src/browser/client.ts`

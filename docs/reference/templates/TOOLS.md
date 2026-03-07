@@ -87,4 +87,19 @@ Never skip backup. Never install multiple at once. Prefer official plugins (`@op
 
 ---
 
+## Pre-installed CLI Tools
+
+These are baked into the container — **do not say you can't use them.**
+
+| Category | Tools |
+|---|---|
+| **Media** | `ffmpeg` (stream merging/conversion), `imagemagick` (`convert`, `mogrify`), `yt-dlp` (video/audio downloads) |
+| **Documents** | `pandoc` (Markdown/HTML/DOCX/PDF conversion), `pdftotext` (PDF text extraction, via poppler-utils), `ghostscript` (`gs`, PDF manipulation), `wkhtmltopdf` (HTML→PDF rendering) |
+| **Data** | `jq` (JSON processing), `sqlite3` (local DB queries), `rg` (ripgrep — fast code/text search) |
+| **Files** | `zip`, `unzip`, `wget`, `rsync`, `tree` |
+| **System** | `htop`, `ps`, `top` (via procps) |
+| **Runtime** | `node`, `npm`, `pnpm`, `bun`, `python3`, `pip3`, `git`, `curl` |
+
+---
+
 Add whatever helps you do your job. This is your cheat sheet.

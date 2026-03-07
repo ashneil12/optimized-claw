@@ -93,6 +93,28 @@ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
   rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
   fi
 
+# ── Agent CLI tooling ─────────────────────────────────────────────────
+# Installed unconditionally — all agents share the gateway container.
+#
+# Media:      ffmpeg (stream merging), imagemagick (image ops)
+# Documents:  pandoc (doc conversion), poppler-utils (pdftotext),
+#             ghostscript (PDF manipulation), wkhtmltopdf (HTML→PDF)
+# Data:       jq (JSON), sqlite3 (local queries), ripgrep (code search)
+# Files:      zip, unzip, wget, rsync, tree
+# System:     htop, procps (ps/top)
+# Runtime:    python3 + pip (yt-dlp dependency)
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  python3 python3-pip \
+  ffmpeg imagemagick \
+  pandoc poppler-utils ghostscript wkhtmltopdf \
+  jq sqlite3 ripgrep \
+  zip unzip wget rsync tree \
+  htop procps && \
+  pip3 install --break-system-packages yt-dlp && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+
 USER node
 COPY --chown=node:node . .
 # Normalize copied plugin/agent paths so plugin safety checks do not reject
