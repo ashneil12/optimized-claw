@@ -1,9 +1,9 @@
-# OpenClaw Installer for Windows (PowerShell)
+# Optimized Claw Installer for Windows (PowerShell)
 # Usage: iwr -useb https://openclaw.ai/install.ps1 | iex
 # Or: & ([scriptblock]::Create((iwr -useb https://openclaw.ai/install.ps1))) -NoOnboard
 
 param(
-    [string]$InstallMethod = "npm",
+    [string]$InstallMethod = "git",
     [string]$Tag = "latest",
     [string]$GitDir = "$env:USERPROFILE\openclaw",
     [switch]$NoOnboard,
@@ -34,8 +34,8 @@ function Write-Host {
 
 function Write-Banner {
     Write-Host ""
-    Write-Host "${ACCENT}  🦞 OpenClaw Installer$NC" -Level info
-    Write-Host "${MUTED}  All your chats, one OpenClaw.$NC" -Level info
+    Write-Host "${ACCENT}  🦞 Optimized Claw Installer$NC" -Level info
+    Write-Host "${MUTED}  Publicly branded as Optimized Claw; runtime stays openclaw.$NC" -Level info
     Write-Host ""
 }
 
@@ -222,7 +222,7 @@ function Install-OpenClawGit {
     
     if (!(Test-Path $RepoDir)) {
         Write-Host "  Cloning repository..." -Level info
-        git clone https://github.com/openclaw/openclaw.git $RepoDir 2>&1
+        git clone https://github.com/ashneil12/optimized-claw.git $RepoDir 2>&1
     } elseif ($Update) {
         Write-Host "  Updating repository..." -Level info
         git -C $RepoDir pull --rebase 2>&1

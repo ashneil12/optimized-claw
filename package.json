@@ -1,17 +1,17 @@
 {
   "name": "openclaw",
   "version": "2026.3.8",
-  "description": "Multi-channel AI gateway with extensible messaging integrations",
+  "description": "Production-hardened OpenClaw fork for multi-agent AI teams",
   "keywords": [],
-  "homepage": "https://github.com/openclaw/openclaw#readme",
+  "homepage": "https://github.com/ashneil12/optimized-claw#readme",
   "bugs": {
-    "url": "https://github.com/openclaw/openclaw/issues"
+    "url": "https://github.com/ashneil12/optimized-claw/issues"
   },
   "license": "MIT",
   "author": "",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openclaw/openclaw.git"
+    "url": "git+https://github.com/ashneil12/optimized-claw.git"
   },
   "bin": {
     "openclaw": "openclaw.mjs"

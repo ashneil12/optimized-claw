@@ -1982,7 +1982,7 @@ function dockerExec(args, { allowFailure = false } = {}) {
  * - OPENCLAW_DOCKER_NETWORK env var set (e.g. "moltbot_default")
  *
  * Container spec mirrors the `ensure-agent-browsers.sh` host script:
- * - Image: MOLTBOT_BROWSER_IMAGE or ghcr.io/ashneil12/moltbotserver-browser:main
+ * - Image: MOLTBOT_BROWSER_IMAGE or ghcr.io/ashneil12/optimized-claw-browser:main
  * - Runs as root (user 0:0) for Chromium sandbox compat
  * - shm_size 2g, seccomp=unconfined
  * - Persistent volume: browser-home-<agentId>:/tmp/openclaw-home
@@ -2025,7 +2025,7 @@ function ensureAgentBrowserContainers(configPath) {
 
   const browserImage = env(
     "OPENCLAW_SANDBOX_BROWSER_IMAGE",
-    env("MOLTBOT_BROWSER_IMAGE", "ghcr.io/ashneil12/moltbotserver-browser:main"),
+    env("MOLTBOT_BROWSER_IMAGE", "ghcr.io/ashneil12/optimized-claw-browser:main"),
   );
   const dockerNetwork = env("OPENCLAW_DOCKER_NETWORK");
   const cdpPort = env("OPENCLAW_BROWSER_CDP_PORT", "9222");

@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-BROWSER_IMAGE="${BROWSER_IMAGE:-ghcr.io/ashneil12/moltbotserver-browser:main}"
+BROWSER_IMAGE="${BROWSER_IMAGE:-ghcr.io/ashneil12/optimized-claw-browser:main}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-moltbot_default}"
 DRY_RUN="${DRY_RUN:-0}"
 

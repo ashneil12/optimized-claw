@@ -7,7 +7,7 @@ read_when:
 
 # TOOLS.md - Local Notes
 
-*Check this file BEFORE saying "I can't do that." You probably can.*
+_Check this file BEFORE saying "I can't do that." You probably can._
 
 Skills define _how_ tools work. This file is for _your_ specifics — the stuff that's unique to your setup.
 
@@ -46,14 +46,35 @@ Skills are shared. Your setup is yours. Keeping them apart means you can update 
 
 ---
 
-## TikTok / Social Video Transcription
+## Video Transcripts & Downloads
 
-**Never tell me you can't pull a video. Figure it out.**
+**Never tell me you can't pull a video or transcript. Figure it out.**
 
-1. `yt-dlp --list-formats <url>`
-2. `yt-dlp -f "h264_540p_*" -o "/tmp/video.%(ext)s" <url>`
-3. `ffmpeg -i /tmp/video.mp4 -vn -acodec libmp3lame /tmp/video.mp3`
-4. `transcribe.sh /tmp/video.mp3 --out /tmp/transcript.txt`
+### Transcripts (fast — try this first)
+
+`yt-dlp` can fetch existing subtitles/captions directly — no download needed:
+
+```bash
+# Check what subtitles are available
+yt-dlp --list-subs <url>
+
+# Grab auto-generated subtitles (YouTube, TikTok, etc.)
+yt-dlp --write-auto-sub --skip-download --sub-lang en -o "/tmp/%(title)s" <url>
+
+# Grab manually uploaded subtitles
+yt-dlp --write-sub --skip-download --sub-lang en -o "/tmp/%(title)s" <url>
+
+# Strip timestamps from SRT → plain text
+sed '/^[0-9]*$/d; /^$/d; /-->/d' /tmp/*.srt > /tmp/transcript.txt
+```
+
+### Full download (fallback — when no subtitles exist)
+
+```bash
+yt-dlp --list-formats <url>
+yt-dlp -f "h264_540p_*" -o "/tmp/video.%(ext)s" <url>
+ffmpeg -i /tmp/video.mp4 -vn -acodec libmp3lame /tmp/video.mp3
+```
 
 ---
 
@@ -91,14 +112,14 @@ Never skip backup. Never install multiple at once. Prefer official plugins (`@op
 
 These are baked into the container — **do not say you can't use them.**
 
-| Category | Tools |
-|---|---|
-| **Media** | `ffmpeg` (stream merging/conversion), `imagemagick` (`convert`, `mogrify`), `yt-dlp` (video/audio downloads) |
-| **Documents** | `pandoc` (Markdown/HTML/DOCX/PDF conversion), `pdftotext` (PDF text extraction, via poppler-utils), `ghostscript` (`gs`, PDF manipulation), `wkhtmltopdf` (HTML→PDF rendering) |
-| **Data** | `jq` (JSON processing), `sqlite3` (local DB queries), `rg` (ripgrep — fast code/text search) |
-| **Files** | `zip`, `unzip`, `wget`, `rsync`, `tree` |
-| **System** | `htop`, `ps`, `top` (via procps) |
-| **Runtime** | `node`, `npm`, `pnpm`, `bun`, `python3`, `pip3`, `git`, `curl` |
+| Category      | Tools                                                                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Media**     | `ffmpeg` (stream merging/conversion), `imagemagick` (`convert`, `mogrify`), `yt-dlp` (video/audio downloads)                                                                                   |
+| **Documents** | `pandoc` (Markdown/HTML/DOCX/PDF conversion), `pdftotext` (PDF text extraction, via poppler-utils), `ghostscript` (`gs`, PDF manipulation), `wkhtmltopdf` (HTML→PDF rendering)                 |
+| **Data**      | `jq` (JSON processing), `sqlite3` (local DB queries), `rg` (ripgrep — fast code/text search), `csvkit` (`csvcut`, `csvgrep`, `csvsql` — CSV manipulation), `xmlstarlet` (XML/XPath processing) |
+| **Files**     | `zip`, `unzip`, `wget`, `rsync`, `tree`                                                                                                                                                        |
+| **System**    | `htop`, `ps`, `top` (via procps)                                                                                                                                                               |
+| **Runtime**   | `node`, `npm`, `pnpm`, `bun`, `python3`, `pip3`, `git`, `curl`                                                                                                                                 |
 
 ---
 

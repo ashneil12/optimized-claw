@@ -6,12 +6,12 @@ FROM node:22-bookworm@sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1
 # - https://docs.openclaw.ai/install/docker
 LABEL org.opencontainers.image.base.name="docker.io/library/node:22-bookworm" \
   org.opencontainers.image.base.digest="sha256:cd7bcd2e7a1e6f72052feb023c7f6b722205d3fcab7bbcbd2d1bfdab10b1e935" \
-  org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
-  org.opencontainers.image.url="https://openclaw.ai" \
+  org.opencontainers.image.source="https://github.com/ashneil12/optimized-claw" \
+  org.opencontainers.image.url="https://github.com/ashneil12/optimized-claw" \
   org.opencontainers.image.documentation="https://docs.openclaw.ai/install/docker" \
   org.opencontainers.image.licenses="MIT" \
-  org.opencontainers.image.title="OpenClaw" \
-  org.opencontainers.image.description="OpenClaw gateway and CLI runtime container image"
+  org.opencontainers.image.title="Optimized Claw" \
+  org.opencontainers.image.description="Optimized Claw gateway and CLI runtime container image"
 
 # Install Bun (required for build scripts)
 RUN curl -fsSL https://bun.sh/install | bash
@@ -99,7 +99,8 @@ RUN if [ -n "$OPENCLAW_INSTALL_DOCKER_CLI" ]; then \
 # Media:      ffmpeg (stream merging), imagemagick (image ops)
 # Documents:  pandoc (doc conversion), poppler-utils (pdftotext),
 #             ghostscript (PDF manipulation), wkhtmltopdf (HTML→PDF)
-# Data:       jq (JSON), sqlite3 (local queries), ripgrep (code search)
+# Data:       jq (JSON), sqlite3 (local queries), ripgrep (code search),
+#             csvkit (CSV manipulation), xmlstarlet (XML/XPath processing)
 # Files:      zip, unzip, wget, rsync, tree
 # System:     htop, procps (ps/top)
 # Runtime:    python3 + pip (yt-dlp dependency)
@@ -109,6 +110,7 @@ RUN apt-get update && \
   ffmpeg imagemagick \
   pandoc poppler-utils ghostscript wkhtmltopdf \
   jq sqlite3 ripgrep \
+  csvkit xmlstarlet \
   zip unzip wget rsync tree \
   htop procps && \
   pip3 install --break-system-packages yt-dlp && \
