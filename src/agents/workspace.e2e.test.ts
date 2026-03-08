@@ -107,7 +107,13 @@ describe("ensureAgentWorkspace", () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
 
-    const memoryFiles = ["diary.md", "self-review.md", "open-loops.md", "identity-scratchpad.md"];
+    const memoryFiles = [
+      "diary.md",
+      "self-review.md",
+      "open-loops.md",
+      "identity-scratchpad.md",
+      "reflection-inbox.md",
+    ];
     for (const file of memoryFiles) {
       const filePath = path.join(tempDir, "memory", file);
       await expect(fs.access(filePath)).resolves.toBeUndefined();

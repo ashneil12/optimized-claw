@@ -71,6 +71,11 @@ describe("resolveReflectionRunPreflight", () => {
       shouldSkip: true,
       summary: "HEARTBEAT_OK\nNEXT_WAKE: 6h",
     });
+    const inbox = await fs.readFile(
+      path.join(workspaceDir, "memory", "reflection-inbox.md"),
+      "utf-8",
+    );
+    expect(inbox).toContain("Changed reflection files: none.");
   });
 
   it("runs when a non-cron session changed after the last reflection pass", async () => {

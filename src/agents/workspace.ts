@@ -549,6 +549,7 @@ export async function ensureAgentWorkspace(params?: {
     "memory/self-review.md",
     "memory/open-loops.md",
     "memory/identity-scratchpad.md",
+    "memory/reflection-inbox.md",
   ];
   for (const relPath of memoryTemplateFiles) {
     const templateContent = await loadTemplate(relPath);

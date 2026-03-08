@@ -64,6 +64,10 @@ import {
   pickSummaryFromPayloads,
   resolveHeartbeatAckMaxChars,
 } from "./helpers.js";
+import {
+  applyReflectionRunPostflight,
+  captureReflectionFileSnapshot,
+} from "./reflection-artifacts.js";
 import { resolveReflectionRunPreflight } from "./reflection-preflight.js";
 import { resolveCronAgentSessionKey } from "./session-key.js";
 import { resolveCronSession } from "./session.js";
@@ -397,6 +401,15 @@ export async function runCronIsolatedAgentTurn(params: {
       summary: reflectionPreflight.summary,
     });
   }
+  let reflectionFileSnapshot: Awaited<ReturnType<typeof captureReflectionFileSnapshot>> = null;
+  try {
+    reflectionFileSnapshot = await captureReflectionFileSnapshot({
+      jobId: params.job.id,
+      workspaceDir,
+    });
+  } catch (error) {
+    logWarn(`[cron:${params.job.id}] Reflection snapshot capture failed: ${String(error)}`);
+  }
 
   const existingSkillsSnapshot = cronSession.sessionEntry.skillsSnapshot;
   const skillsSnapshot = resolveCronSkillsSnapshot({
@@ -543,6 +556,16 @@ export async function runCronIsolatedAgentTurn(params: {
 
   if (isAborted()) {
     return withRunSession({ status: "error", error: abortReason() });
+  }
+
+  try {
+    await applyReflectionRunPostflight({
+      jobId: params.job.id,
+      workspaceDir,
+      before: reflectionFileSnapshot,
+    });
+  } catch (error) {
+    logWarn(`[cron:${params.job.id}] Reflection postflight failed: ${String(error)}`);
   }
 
   const payloads = runResult.payloads ?? [];

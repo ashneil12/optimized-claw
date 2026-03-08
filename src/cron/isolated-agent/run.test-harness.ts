@@ -40,6 +40,8 @@ export const getCliSessionIdMock = createMock();
 export const loadSessionStoreMock = createMock();
 export const resolveStorePathMock = createMock();
 export const resolveReflectionRunPreflightMock = createMock();
+export const captureReflectionFileSnapshotMock = createMock();
+export const applyReflectionRunPostflightMock = createMock();
 export const updateSessionStoreMock = createMock();
 export const resolveCronSessionMock = createMock();
 export const logWarnMock = createMock();
@@ -203,6 +205,11 @@ vi.mock("./reflection-preflight.js", () => ({
   resolveReflectionRunPreflight: resolveReflectionRunPreflightMock,
 }));
 
+vi.mock("./reflection-artifacts.js", () => ({
+  captureReflectionFileSnapshot: captureReflectionFileSnapshotMock,
+  applyReflectionRunPostflight: applyReflectionRunPostflightMock,
+}));
+
 vi.mock("../../agents/defaults.js", () => ({
   DEFAULT_CONTEXT_TOKENS: 128000,
   DEFAULT_MODEL: "gpt-4",
@@ -283,6 +290,10 @@ export function resetRunCronIsolatedAgentTurnHarness(): void {
 
   resolveReflectionRunPreflightMock.mockReset();
   resolveReflectionRunPreflightMock.mockResolvedValue({ shouldSkip: false });
+  captureReflectionFileSnapshotMock.mockReset();
+  captureReflectionFileSnapshotMock.mockResolvedValue(null);
+  applyReflectionRunPostflightMock.mockReset();
+  applyReflectionRunPostflightMock.mockResolvedValue(undefined);
 
   updateSessionStoreMock.mockReset();
   updateSessionStoreMock.mockResolvedValue(undefined);
