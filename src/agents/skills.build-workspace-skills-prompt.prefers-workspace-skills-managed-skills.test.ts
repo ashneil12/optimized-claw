@@ -121,7 +121,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
         managedSkillsDir: path.join(workspaceDir, ".managed"),
         config: {
           browser: { enabled: false },
-          skills: { entries: { "env-skill": { apiKey: "ok" } } },
+          skills: { entries: { "env-skill": { apiKey: "ok" } } }, // pragma: allowlist secret
         },
       });
       expect(gatedPrompt).toContain("bin-skill");

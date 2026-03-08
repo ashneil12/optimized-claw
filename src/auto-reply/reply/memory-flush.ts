@@ -13,7 +13,8 @@ export const DEFAULT_MEMORY_FLUSH_FORCE_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 export const DEFAULT_MEMORY_FLUSH_PROMPT = [
   "Pre-compaction memory flush.",
   "Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed).",
-  "IMPORTANT: If the file already exists, APPEND new content only and do not overwrite existing entries.",
+  "IMPORTANT: If the file already exists, APPEND new content only — do not overwrite existing entries.",
+  "Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.",
   "",
   "Also update memory/session-context.md with a concise summary of this session so far.",
   "Include: what the user discussed, key decisions made, anything in progress or unfinished.",

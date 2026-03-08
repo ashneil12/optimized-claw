@@ -74,6 +74,8 @@ type ReplyDispatcherWithTypingResult = {
   markDispatchIdle: () => void;
   /** Resolved TTL-expiry callback to pass to the typing controller. */
   onTtlExpired: () => void;
+  /** Signal that the model run is complete so the typing controller can stop. */
+  markRunComplete: () => void;
 };
 
 export type ReplyDispatcher = {
@@ -254,5 +256,8 @@ export function createReplyDispatcherWithTyping(
       resolvedOnIdle?.();
     },
     onTtlExpired: resolvedOnTtlExpired,
+    markRunComplete: () => {
+      typingController?.markRunComplete();
+    },
   };
 }

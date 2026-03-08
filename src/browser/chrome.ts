@@ -326,9 +326,6 @@ export async function launchOpenClawChrome(
       args.push("--disable-dev-shm-usage");
     }
 
-    // Stealth: hide navigator.webdriver from automation detection (#80)
-    args.push("--disable-blink-features=AutomationControlled");
-
     // ── Residential proxy ────────────────────────────────────────────────
     const proxyServer = resolveProxyServer();
     if (proxyServer) {
