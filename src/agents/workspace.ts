@@ -75,8 +75,8 @@ export function resolveHumanModeEnabled(): boolean {
  * Check if business mode is enabled.
  * Defaults to FALSE — business mode is off unless explicitly enabled
  * via OPENCLAW_BUSINESS_MODE=1 or OPENCLAW_BUSINESS_MODE_ENABLED=true.
- * When enabled, openclaw-business-v1.md and business/ docs are seeded into the workspace.
- * When disabled, references to these files are removed from SOUL.md.
+ * When enabled, SOUL.md is overwritten with the business guide content
+ * and business/ knowledge docs are seeded into the workspace.
  */
 export function resolveBusinessModeEnabled(): boolean {
   const short = process.env.OPENCLAW_BUSINESS_MODE?.trim();
@@ -150,9 +150,11 @@ export async function removeHumanModeSectionFromSoul(
 
 /**
  * Strip `<!-- if-business-mode -->` / `<!-- end-business-mode -->` conditional blocks
- * from a workspace file based on whether business mode is enabled.
+ * from a workspace file. This is a legacy safety net for workspaces whose SOUL.md
+ * may still contain the old conditional markers from before business mode was
+ * changed to overwrite SOUL.md entirely.
  */
-export async function removeBusinessModeSectionFromSoul(
+async function removeBusinessModeSectionFromSoul(
   filePath: string,
   businessModeEnabled: boolean,
 ): Promise<void> {
@@ -351,6 +353,8 @@ type WorkspaceOnboardingState = {
   version: typeof WORKSPACE_STATE_VERSION;
   bootstrapSeededAt?: string;
   onboardingCompletedAt?: string;
+  /** Tracks when SOUL.md has been overwritten by a mode (e.g. "business"). */
+  soulOverride?: string;
 };
 
 async function writeFileIfMissing(filePath: string, content: string): Promise<boolean> {
@@ -387,6 +391,7 @@ function parseWorkspaceOnboardingState(raw: string): WorkspaceOnboardingState | 
     const parsed = JSON.parse(raw) as {
       bootstrapSeededAt?: unknown;
       onboardingCompletedAt?: unknown;
+      soulOverride?: unknown;
     };
     if (!parsed || typeof parsed !== "object") {
       return null;
@@ -397,6 +402,7 @@ function parseWorkspaceOnboardingState(raw: string): WorkspaceOnboardingState | 
         typeof parsed.bootstrapSeededAt === "string" ? parsed.bootstrapSeededAt : undefined,
       onboardingCompletedAt:
         typeof parsed.onboardingCompletedAt === "string" ? parsed.onboardingCompletedAt : undefined,
+      soulOverride: typeof parsed.soulOverride === "string" ? parsed.soulOverride : undefined,
     };
   } catch {
     return null;
@@ -554,7 +560,41 @@ export async function ensureAgentWorkspace(params?: {
 
   // Business mode: strip conditional markers based on OPENCLAW_BUSINESS_MODE
   const businessModeEnabled = resolveBusinessModeEnabled();
-  await removeBusinessModeSectionFromSoul(soulPath, businessModeEnabled);
+
+  // Business mode: overwrite SOUL.md with business guide content when enabled.
+  // When disabled after being on, restore the original SOUL.md template.
+  // NOTE: We read state early and reuse it for the bootstrap logic below to
+  // avoid a redundant disk read.
+  let state = await readWorkspaceOnboardingState(statePath);
+  let stateDirty = false;
+  const markState = (next: Partial<WorkspaceOnboardingState>) => {
+    state = { ...state, ...next };
+    stateDirty = true;
+  };
+  const nowIso = () => new Date().toISOString();
+
+  if (businessModeEnabled) {
+    // Overwrite SOUL.md entirely with business template content.
+    // Skip conditional stripping — the file is being replaced wholesale.
+    const businessTemplate = await loadTemplate(DEFAULT_BUSINESS_GUIDE_FILENAME);
+    await fs.writeFile(soulPath, businessTemplate, "utf-8");
+    if (state.soulOverride !== "business") {
+      markState({ soulOverride: "business" });
+    }
+  } else {
+    // Non-business mode: strip business conditional markers from SOUL.md
+    await removeBusinessModeSectionFromSoul(soulPath, false);
+
+    if (state.soulOverride === "business") {
+      // Business mode was on but now off — restore original SOUL.md
+      await fs.writeFile(soulPath, soulTemplate, "utf-8");
+      // Re-apply conditional stripping to the freshly restored template
+      await stripHonchoConditionals(soulPath, honchoEnabled);
+      await removeHumanModeSectionFromSoul(soulPath, humanModeEnabled);
+      await removeBusinessModeSectionFromSoul(soulPath, false);
+      markState({ soulOverride: undefined });
+    }
+  }
 
   // Seed extra context files from templates
   const operationsPath = path.join(dir, DEFAULT_OPERATIONS_FILENAME);
@@ -588,12 +628,10 @@ export async function ensureAgentWorkspace(params?: {
     }
   }
 
-  // Business mode: seed openclaw-business-v1.md and business/ docs when enabled
+  // Business mode: seed business/ knowledge docs when enabled (for memory_search).
+  // NOTE: openclaw-business-v1.md is NOT seeded as a separate file — its content
+  // is now written directly into SOUL.md (see business mode override above).
   if (businessModeEnabled) {
-    const businessGuidePath = path.join(dir, DEFAULT_BUSINESS_GUIDE_FILENAME);
-    const businessGuideTemplate = await loadTemplate(DEFAULT_BUSINESS_GUIDE_FILENAME);
-    await writeFileIfMissing(businessGuidePath, businessGuideTemplate);
-
     // Seed business knowledge docs from templates/business/ into workspace/business/
     const templateDir = await resolveWorkspaceTemplateDir();
     const businessTemplateDir = path.join(templateDir, DEFAULT_BUSINESS_DOCS_DIRNAME);
@@ -612,6 +650,7 @@ export async function ensureAgentWorkspace(params?: {
     const businessGuidePath = path.join(dir, DEFAULT_BUSINESS_GUIDE_FILENAME);
     try {
       await fs.rm(businessWorkspaceDir, { recursive: true, force: true });
+      // Also clean up any leftover separate business guide file from legacy workspaces
       await fs.unlink(businessGuidePath).catch(() => {});
       console.log("[workspace] Deleted business files from workspace (user requested cleanup)");
     } catch {
@@ -634,13 +673,8 @@ export async function ensureAgentWorkspace(params?: {
     await writeFileIfMissing(path.join(dir, relPath), templateContent);
   }
 
-  let state = await readWorkspaceOnboardingState(statePath);
-  let stateDirty = false;
-  const markState = (next: Partial<WorkspaceOnboardingState>) => {
-    state = { ...state, ...next };
-    stateDirty = true;
-  };
-  const nowIso = () => new Date().toISOString();
+  // NOTE: state, stateDirty, markState, and nowIso are defined above
+  // in the business mode block and reused here for bootstrap logic.
 
   let bootstrapExists = await fileExists(bootstrapPath);
   if (!state.bootstrapSeededAt && bootstrapExists) {
@@ -713,43 +747,6 @@ export async function ensureAgentWorkspace(params?: {
   };
 }
 
-async function _resolveMemoryBootstrapEntries(
-  resolvedDir: string,
-): Promise<Array<{ name: WorkspaceBootstrapFileName; filePath: string }>> {
-  const candidates: WorkspaceBootstrapFileName[] = [
-    DEFAULT_MEMORY_FILENAME,
-    DEFAULT_MEMORY_ALT_FILENAME,
-  ];
-  const entries: Array<{ name: WorkspaceBootstrapFileName; filePath: string }> = [];
-  for (const name of candidates) {
-    const filePath = path.join(resolvedDir, name);
-    try {
-      await fs.access(filePath);
-      entries.push({ name, filePath });
-    } catch {
-      // optional
-    }
-  }
-  if (entries.length <= 1) {
-    return entries;
-  }
-
-  const seen = new Set<string>();
-  const deduped: Array<{ name: WorkspaceBootstrapFileName; filePath: string }> = [];
-  for (const entry of entries) {
-    let key = entry.filePath;
-    try {
-      key = await fs.realpath(entry.filePath);
-    } catch {}
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(entry);
-  }
-  return deduped;
-}
-
 export async function loadWorkspaceBootstrapFiles(dir: string): Promise<WorkspaceBootstrapFile[]> {
   const resolvedDir = resolveUserPath(dir);
 
@@ -804,10 +801,11 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
       name: DEFAULT_HUMAN_GUIDE_FILENAME,
       filePath: path.join(resolvedDir, DEFAULT_HUMAN_GUIDE_FILENAME),
     },
-    {
-      name: DEFAULT_BUSINESS_GUIDE_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_BUSINESS_GUIDE_FILENAME),
-    },
+    // NOTE: openclaw-business-v1.md is intentionally NOT listed here.
+    // When business mode is active, the business content lives inside SOUL.md.
+    // Legacy workspaces that still have the separate file will have it detected
+    // as a stale artifact — the system prompt handles this via hasBusinessModeFiles
+    // as a fallback.
   ];
   for (const extra of extraContextFiles) {
     try {

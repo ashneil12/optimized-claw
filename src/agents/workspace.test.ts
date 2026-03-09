@@ -175,7 +175,7 @@ describe("loadWorkspaceBootstrapFiles", () => {
       [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME].includes(file.name),
     );
 
-  const expectSingleMemoryEntry = (
+  const _expectSingleMemoryEntry = (
     files: Awaited<ReturnType<typeof loadWorkspaceBootstrapFiles>>,
     content: string,
   ) => {
@@ -184,21 +184,23 @@ describe("loadWorkspaceBootstrapFiles", () => {
     expect(memoryEntries[0]?.missing).toBe(false);
     expect(memoryEntries[0]?.content).toBe(content);
   };
+  // NOTE: MEMORY.md / memory.md are intentionally NOT loaded into bootstrap context.
+  // They can grow very large and should be accessed via memory_search (QMD).
 
-  it("includes MEMORY.md when present", async () => {
+  it("does not load MEMORY.md into bootstrap context (too large for prompt injection)", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await writeWorkspaceFile({ dir: tempDir, name: "MEMORY.md", content: "memory" });
 
     const files = await loadWorkspaceBootstrapFiles(tempDir);
-    expectSingleMemoryEntry(files, "memory");
+    expect(getMemoryEntries(files)).toHaveLength(0);
   });
 
-  it("includes memory.md when MEMORY.md is absent", async () => {
+  it("does not load memory.md into bootstrap context", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await writeWorkspaceFile({ dir: tempDir, name: "memory.md", content: "alt" });
 
     const files = await loadWorkspaceBootstrapFiles(tempDir);
-    expectSingleMemoryEntry(files, "alt");
+    expect(getMemoryEntries(files)).toHaveLength(0);
   });
 
   it("omits memory entries when no memory files exist", async () => {

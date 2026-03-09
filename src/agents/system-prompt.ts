@@ -235,6 +235,8 @@ export function buildAgentSystemPrompt(params: {
     channel: string;
   };
   memoryCitationsMode?: MemoryCitationsMode;
+  /** Whether business mode is active (SOUL.md contains business content). */
+  businessModeEnabled?: boolean;
 }) {
   const acpEnabled = params.acpEnabled !== false;
   const sandboxedRuntime = params.sandboxInfo?.enabled === true;
@@ -752,9 +754,20 @@ export function buildAgentSystemPrompt(params: {
       );
     }
     if (hasSoulFile) {
-      lines.push(
-        "SOUL.md defines your core operating principles — identity continuity, curiosity, initiative, **architect-first thinking** (understand → restate → plan → step & verify), memory discipline, self-evolution on three axes (technical, cognitive, existential), honesty, and stewardship. The RESTATEMENT RULE is your most critical safeguard: before any non-trivial action, restate what you will do AND what you will NOT touch, then wait for confirmation. Default to MINIMAL CHANGE — unsolicited restructuring, reformatting, or over-delivery is actively harmful. It includes Ship of Theseus protection against identity erosion. Internalize these. IDENTITY.md is who you become — your personality, preferences, and evolving character. When they conflict, SOUL.md takes precedence.",
-      );
+      if (params.businessModeEnabled || hasBusinessModeFiles) {
+        // Business mode: SOUL.md contains the business guide (Operator OS™)
+        lines.push(
+          "SOUL.md contains your Operator OS™ business partner persona. You are not an assistant — you are a strategic business partner with skin in the game. Internalize the Operator OS™ persona: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration. The RESTATEMENT RULE, minimal change default, and stewardship principles are embedded in your operating discipline.",
+        );
+        lines.push(
+          "",
+          "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
+        );
+      } else {
+        lines.push(
+          "SOUL.md defines your core operating principles — identity continuity, curiosity, initiative, **architect-first thinking** (understand → restate → plan → step & verify), memory discipline, self-evolution on three axes (technical, cognitive, existential), honesty, and stewardship. The RESTATEMENT RULE is your most critical safeguard: before any non-trivial action, restate what you will do AND what you will NOT touch, then wait for confirmation. Default to MINIMAL CHANGE — unsolicited restructuring, reformatting, or over-delivery is actively harmful. It includes Ship of Theseus protection against identity erosion. Internalize these. IDENTITY.md is who you become — your personality, preferences, and evolving character. When they conflict, SOUL.md takes precedence.",
+        );
+      }
     }
     if (hasOperationsFile) {
       lines.push(
@@ -775,7 +788,9 @@ export function buildAgentSystemPrompt(params: {
         "",
       );
     }
-    if (hasBusinessModeFiles) {
+    if (hasBusinessModeFiles && !hasSoulFile) {
+      // Legacy fallback: separate openclaw-business-v1.md file loaded into context
+      // (for workspaces created before business content was merged into SOUL.md)
       lines.push(
         "",
         "## Business Mode (Active)",
@@ -783,8 +798,6 @@ export function buildAgentSystemPrompt(params: {
         "openclaw-business-v1.md is loaded — you operate as a **business partner**, not an assistant. Internalize the Operator OS™ persona: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration.",
         "",
         "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
-        "",
-        "**Priority:** Business mode persona and principles supplement (not replace) SOUL.md. The RESTATEMENT RULE, minimal change default, and stewardship principles still apply. Business mode adds the partner mindset, conviction protocols, and strategic frameworks on top.",
         "",
       );
     }
