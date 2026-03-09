@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import type { CompressionConfig } from "./trajectory-compressor.js";
 
 const log = createSubsystemLogger("session-context");
 
@@ -196,14 +197,79 @@ export function updateSessionContextFile(workspaceDir: string, newSummary: strin
 /**
  * Generate and persist a session context summary from an outgoing transcript.
  * Best-effort: silently skips if the transcript is unreadable or empty.
+ *
+ * Uses the trajectory compressor for richer summaries (key decisions, tool usage,
+ * user intents, protected context). Falls back to legacy extraction on failure.
+ *
+ * When a `summarize` callback is provided, the mechanical summary is persisted
+ * immediately, then an async LLM-enhanced summary replaces it (fire-and-forget).
  */
 export function persistSessionContextOnReset(params: {
   transcriptPath: string;
   workspaceDir: string;
+  /** Optional async LLM summarization callback. When provided, the mechanical
+   *  summary is persisted first, then asynchronously upgraded via LLM. */
+  summarize?: CompressionConfig["summarize"];
 }): void {
-  const summary = extractSessionContextFromTranscript(params.transcriptPath);
-  if (!summary) {
-    return;
+  try {
+    const { compressTrajectorySync } = require("./trajectory-compressor.js") as {
+      compressTrajectorySync: typeof import("./trajectory-compressor.js").compressTrajectorySync;
+    };
+    const result = compressTrajectorySync({
+      transcriptPath: params.transcriptPath,
+    });
+    if (result.summary) {
+      log.info(
+        `trajectory compression: ${result.metrics.totalTurns} turns → ${result.metrics.outputChars} chars ` +
+          `(${result.metrics.compressedTurns} compressed)`,
+      );
+      updateSessionContextFile(params.workspaceDir, result.summary);
+
+      // If a summarize callback is provided, fire-and-forget an async LLM upgrade
+      if (params.summarize) {
+        void upgradeSummaryWithLlm({
+          transcriptPath: params.transcriptPath,
+          workspaceDir: params.workspaceDir,
+          summarize: params.summarize,
+        });
+      }
+      return;
+    }
+  } catch (err) {
+    log.warn(`trajectory compressor failed, using legacy extraction: ${String(err)}`);
   }
-  updateSessionContextFile(params.workspaceDir, summary);
+
+  // Legacy fallback
+  const summary = extractSessionContextFromTranscript(params.transcriptPath);
+  if (summary) {
+    updateSessionContextFile(params.workspaceDir, summary);
+  }
+}
+
+/**
+ * Async LLM upgrade path: re-runs trajectory compression with an LLM summarize
+ * callback and replaces the mechanical summary if the LLM produces a better one.
+ * Runs as fire-and-forget — failures are silently logged and don't affect the
+ * already-persisted mechanical summary.
+ */
+async function upgradeSummaryWithLlm(params: {
+  transcriptPath: string;
+  workspaceDir: string;
+  summarize: NonNullable<CompressionConfig["summarize"]>;
+}): Promise<void> {
+  try {
+    const { compressTrajectory } = await import("./trajectory-compressor.js");
+    const result = await compressTrajectory({
+      transcriptPath: params.transcriptPath,
+      config: { summarize: params.summarize },
+    });
+    if (result.summary && result.metrics.usedLlm) {
+      log.info(
+        `LLM trajectory upgrade: ${result.metrics.totalTurns} turns → ${result.metrics.outputChars} chars`,
+      );
+      updateSessionContextFile(params.workspaceDir, result.summary);
+    }
+  } catch (err) {
+    log.warn(`LLM trajectory upgrade failed (non-critical): ${String(err)}`);
+  }
 }

@@ -271,6 +271,10 @@ export function buildAgentSystemPrompt(params: {
     session_status:
       "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); use for model-use questions (📊 session_status); optional per-session model override",
     image: "Analyze an image with the configured image model",
+    session_search:
+      "Search past conversation history using exact keyword/phrase matching. Use for finding specific names, commands, error messages, or decisions from previous sessions. For semantic/conceptual search, use memory_search instead.",
+    skill_manage:
+      "Create, update, delete, or list skill documents. Use to capture successful problem-solving patterns, workflows, or domain expertise as reusable skills.",
   };
 
   const toolOrder = [
@@ -297,6 +301,8 @@ export function buildAgentSystemPrompt(params: {
     "sessions_send",
     "subagents",
     "session_status",
+    "session_search",
+    "skill_manage",
     "image",
   ];
 
@@ -511,6 +517,20 @@ export function buildAgentSystemPrompt(params: {
     "",
     ...skillsSection,
     ...memorySection,
+    // Skill auto-creation guidance — shown when skill_manage tool is available
+    availableTools.has("skill_manage") && !isMinimal
+      ? [
+          "## Skill Auto-Creation",
+          "You can create reusable skill documents using `skill_manage`. Consider creating a skill when:",
+          "- You've successfully solved a novel problem that may recur",
+          "- You notice you've repeated a multi-step workflow more than once",
+          "- You've learned domain-specific expertise worth preserving (APIs, configurations, deployment patterns)",
+          "- The user explicitly asks you to document a process",
+          "Keep skills focused and actionable — one skill per workflow/pattern. Include the exact steps, commands, and configuration needed to reproduce the result.",
+          "Do NOT create skills for trivial or one-off tasks. Quality over quantity.",
+          "",
+        ].join("\n")
+      : "",
     // Skip self-update for subagent/none modes
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal

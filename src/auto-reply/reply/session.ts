@@ -569,15 +569,30 @@ export async function initSessionState(params: {
   // continuity. Best-effort: reads recent user messages from the outgoing
   // transcript and writes a structured summary to memory/session-context.md.
   if (previousSessionEntry?.sessionFile) {
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId) ?? DEFAULT_AGENT_WORKSPACE_DIR;
     try {
       const { persistSessionContextOnReset } = await import("./session-context-summary.js");
-      const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId) ?? DEFAULT_AGENT_WORKSPACE_DIR;
       persistSessionContextOnReset({
         transcriptPath: previousSessionEntry.sessionFile,
         workspaceDir,
       });
     } catch {
       // Best-effort — session context summary is non-critical
+    }
+
+    // Index session messages for FTS5 search (session_search tool).
+    try {
+      const { indexTranscriptForSearch } = await import("./session-search.js");
+      indexTranscriptForSearch({
+        transcriptPath: previousSessionEntry.sessionFile,
+        workspaceDir,
+        agentId,
+        sessionId: previousSessionEntry.sessionId ?? "",
+        channel: (ctx.OriginatingChannel as string | undefined) ?? ctx.Surface ?? ctx.Provider,
+      });
+    } catch (err) {
+      // Best-effort — session search indexing is non-critical
+      log.warn(`session search indexing failed: ${String(err)}`);
     }
   }
 

@@ -178,6 +178,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "session_search",
+    label: "session_search",
+    description: "Search past sessions",
+    sectionId: "sessions",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "browser",
     label: "browser",
     description: "Control web browser",
@@ -247,6 +255,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     description: "Text-to-speech conversion",
     sectionId: "media",
     profiles: [],
+    includeInOpenClawGroup: true,
+  },
+  {
+    id: "skill_manage",
+    label: "skill_manage",
+    description: "Manage skills",
+    sectionId: "memory",
+    profiles: ["coding"],
     includeInOpenClawGroup: true,
   },
 ];

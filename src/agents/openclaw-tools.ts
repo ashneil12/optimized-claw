@@ -15,11 +15,13 @@ import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createPdfTool } from "./tools/pdf-tool.js";
+import { createSessionSearchTool } from "./tools/session-search-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
+import { createSkillManageTool } from "./tools/skill-manage-tool.js";
 import { createSqlExecuteTool, createSqlQueryTool } from "./tools/sql-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
@@ -213,6 +215,29 @@ export function createOpenClawTools(
   });
   if (sqlExecuteTool) {
     tools.push(sqlExecuteTool);
+  }
+
+  // Session search — FTS5 keyword search across past conversations
+  const agentId = resolveSessionAgentId({
+    sessionKey: options?.agentSessionKey,
+    config: options?.config,
+  });
+  const sessionSearchTool = createSessionSearchTool({
+    config: options?.config,
+    agentId,
+    isSubagent: Boolean(options?.agentSessionKey && options.agentSessionKey.includes(":spawned:")),
+  });
+  if (sessionSearchTool) {
+    tools.push(sessionSearchTool);
+  }
+
+  // Skill management — agents can create/update/delete/list skill docs
+  const skillManageTool = createSkillManageTool({
+    config: options?.config,
+    agentId,
+  });
+  if (skillManageTool) {
+    tools.push(skillManageTool);
   }
 
   const pluginTools = resolvePluginTools({
