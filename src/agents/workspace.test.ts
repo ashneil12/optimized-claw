@@ -50,15 +50,6 @@ async function expectBootstrapSeeded(dir: string) {
   expect(state.bootstrapSeededAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
 }
 
-async function expectCompletedWithoutBootstrap(dir: string) {
-  await expect(fs.access(path.join(dir, DEFAULT_IDENTITY_FILENAME))).resolves.toBeUndefined();
-  await expect(fs.access(path.join(dir, DEFAULT_BOOTSTRAP_FILENAME))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  const state = await readOnboardingState(dir);
-  expect(state.onboardingCompletedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
-}
-
 function expectSubagentAllowedBootstrapNames(files: WorkspaceBootstrapFile[]) {
   const names = files.map((file) => file.name);
   expect(names).toContain("AGENTS.md");
@@ -81,8 +72,9 @@ describe("ensureAgentWorkspace", () => {
     expect((await readOnboardingState(tempDir)).onboardingCompletedAt).toBeUndefined();
   });
 
-  it("recovers partial initialization by creating BOOTSTRAP.md when marker is missing", async () => {
+  it("recovers partial initialization by creating BOOTSTRAP.md when no state file exists", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    // Pre-create a template file (simulates crash mid-initialization)
     await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_AGENTS_FILENAME, content: "existing" });
 
     await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
@@ -123,32 +115,41 @@ describe("ensureAgentWorkspace", () => {
     expect(state.onboardingCompletedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
   });
 
-  it("treats memory-backed workspaces as existing even when template files are missing", async () => {
+  it("creates BOOTSTRAP.md when entrypoint pre-seeds workspace files (SaaS fresh-deploy)", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    // Simulate docker-entrypoint.sh: it copies SOUL.md, HEARTBEAT.md and creates
+    // memory/ with template files BEFORE the gateway starts.
+    // NOTE: IDENTITY.md and USER.md are NOT pre-written here because the real
+    // entrypoint no longer deploys them (they're seeded by ensureAgentWorkspace).
+    await writeWorkspaceFile({ dir: tempDir, name: "SOUL.md", content: "soul content" });
+    await writeWorkspaceFile({ dir: tempDir, name: "HEARTBEAT.md", content: "heartbeat" });
+    await fs.mkdir(path.join(tempDir, "memory"), { recursive: true });
+    await fs.writeFile(path.join(tempDir, "memory", "self-review.md"), "# Self Review\nTemplate");
+
+    // First call to ensureAgentWorkspace — BOOTSTRAP.md must be created
+    // despite the entrypoint having already seeded several files.
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+
+    await expectBootstrapSeeded(tempDir);
+    expect((await readOnboardingState(tempDir)).onboardingCompletedAt).toBeUndefined();
+  });
+
+  it("creates BOOTSTRAP.md even with pre-existing memory and git dirs on first run", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    // memory/ and .git/ can be created by the entrypoint or other tooling;
+    // they should NOT prevent BOOTSTRAP.md from being seeded on first run.
     await fs.mkdir(path.join(tempDir, "memory"), { recursive: true });
     await fs.writeFile(path.join(tempDir, "memory", "2026-02-25.md"), "# Daily log\nSome notes");
     await fs.writeFile(path.join(tempDir, "MEMORY.md"), "# Long-term memory\nImportant stuff");
-
-    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
-
-    await expect(fs.access(path.join(tempDir, DEFAULT_IDENTITY_FILENAME))).resolves.toBeUndefined();
-    await expect(fs.access(path.join(tempDir, DEFAULT_BOOTSTRAP_FILENAME))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    const state = await readOnboardingState(tempDir);
-    expect(state.onboardingCompletedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
-    const memoryContent = await fs.readFile(path.join(tempDir, "MEMORY.md"), "utf-8");
-    expect(memoryContent).toBe("# Long-term memory\nImportant stuff");
-  });
-
-  it("treats git-backed workspaces as existing even when template files are missing", async () => {
-    const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await fs.mkdir(path.join(tempDir, ".git"), { recursive: true });
     await fs.writeFile(path.join(tempDir, ".git", "HEAD"), "ref: refs/heads/main\n");
 
     await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
 
-    await expectCompletedWithoutBootstrap(tempDir);
+    await expectBootstrapSeeded(tempDir);
+    // Ensure user's MEMORY.md content was preserved (not overwritten by template)
+    const memoryContent = await fs.readFile(path.join(tempDir, "MEMORY.md"), "utf-8");
+    expect(memoryContent).toBe("# Long-term memory\nImportant stuff");
   });
 
   it("preserves BOOTSTRAP.md across successive calls (SaaS fresh-deploy regression)", async () => {

@@ -485,66 +485,14 @@ if [ -f "$WORKSPACE_DIR/SOUL.md" ]; then
   echo "[entrypoint] Model routing configured: coding=${CODING_MODEL:-default} writing=${WRITING_MODEL:-default} search=${SEARCH_MODEL:-default} image=${IMAGE_MODEL:-default}"
 fi
 
-# Deploy IDENTITY.md (writable self-evolution file) if it doesn't exist
-# Unlike SOUL.md which is read-only for security, IDENTITY.md is meant to evolve
-if [ -f "/app/IDENTITY.md" ]; then
-  if [ ! -f "$WORKSPACE_DIR/IDENTITY.md" ]; then
-    echo "[entrypoint] Creating IDENTITY.md template (writable self-evolution file)..."
-    cp "/app/IDENTITY.md" "$WORKSPACE_DIR/IDENTITY.md"
-    # IDENTITY.md should be writable (agent needs to update it for self-improvement)
-    chmod 644 "$WORKSPACE_DIR/IDENTITY.md"
-  else
-    echo "[entrypoint] IDENTITY.md exists, skipping template copy to preserve evolved identity."
-  fi
-fi
+# NOTE: IDENTITY.md, WORKING.md, memory/, self-review.md, open-loops.md, and
+# HEARTBEAT.md are NO LONGER deployed here. They are seeded by ensureAgentWorkspace()
+# when the gateway starts. Deploying them here caused BOOTSTRAP.md to never be
+# created on fresh deploys (the bootstrapper saw these files and assumed onboarding
+# was already complete).
+# SOUL.md and ACIP_SECURITY.md are still deployed here because they have special
+# entrypoint-only handling (read-only permissions, model placeholder rendering).
 
-# [MOLTBOT CUSTOMIZATION START] - Memory & task persistence
-# Deploy WORKING.md template if it doesn't exist
-if [ -f "/app/WORKING.md" ]; then
-  # Only create if it doesn't exist (don't overwrite user's work)
-  if [ ! -f "$WORKSPACE_DIR/WORKING.md" ]; then
-    echo "[entrypoint] Creating WORKING.md template..."
-    cp /app/WORKING.md "$WORKSPACE_DIR/WORKING.md"
-    # WORKING.md should be writable (agent needs to update it)
-    chmod 644 "$WORKSPACE_DIR/WORKING.md"
-  fi
-fi
-
-# Create memory directory structure
-MEMORY_DIR="$WORKSPACE_DIR/memory"
-if [ ! -d "$MEMORY_DIR" ]; then
-  echo "[entrypoint] Creating memory directory..."
-  mkdir -p "$MEMORY_DIR"
-fi
-
-# Deploy self-review template if it doesn't exist
-if [ -f "/app/templates/memory/self-review.md" ]; then
-  if [ ! -f "$MEMORY_DIR/self-review.md" ]; then
-    echo "[entrypoint] Creating memory/self-review.md template..."
-    cp /app/templates/memory/self-review.md "$MEMORY_DIR/self-review.md"
-    chmod 644 "$MEMORY_DIR/self-review.md"
-  fi
-fi
-
-# Deploy open-loops template if it doesn't exist
-if [ -f "/app/templates/memory/open-loops.md" ]; then
-  if [ ! -f "$MEMORY_DIR/open-loops.md" ]; then
-    echo "[entrypoint] Creating memory/open-loops.md template..."
-    cp /app/templates/memory/open-loops.md "$MEMORY_DIR/open-loops.md"
-    chmod 644 "$MEMORY_DIR/open-loops.md"
-  fi
-fi
-
-# Deploy HEARTBEAT.md template if it doesn't exist
-if [ -f "/app/HEARTBEAT.md" ]; then
-  if [ ! -f "$WORKSPACE_DIR/HEARTBEAT.md" ]; then
-    echo "[entrypoint] Creating HEARTBEAT.md template..."
-    cp /app/HEARTBEAT.md "$WORKSPACE_DIR/HEARTBEAT.md"
-    chmod 644 "$WORKSPACE_DIR/HEARTBEAT.md"
-  fi
-fi
-
-# [MOLTBOT CUSTOMIZATION END]
 
 # Create subagent log directory
 SUBAGENT_LOG_DIR="$WORKSPACE_DIR/subagent-logs"
