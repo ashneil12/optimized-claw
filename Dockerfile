@@ -230,12 +230,17 @@ RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,shar
   htop procps && \
   pip3 install --break-system-packages yt-dlp
 
+# Copy Bun from build stage — needed for qmd install and runtime shim.
+# Bun is installed in the build stage but not carried to the runtime image.
+COPY --from=build /root/.bun /root/.bun
+ENV PATH="/root/.bun/bin:${PATH}"
+
 # Install qmd — the local-first memory search sidecar used when
 # memory.backend = "qmd" (OPENCLAW_QMD_ENABLED=true).
 # Must be installed at build time so the binary is present in the image;
 # omitting this causes spawn ENOENT errors every 5 minutes at runtime.
-# Uses bun (already installed) to install the package, then creates a shim
-# at /usr/local/bin/qmd that runs the TypeScript source via bun run.
+# Uses bun (copied from build stage) to install the package, then creates
+# a shim at /usr/local/bin/qmd that runs the TypeScript source via bun run.
 RUN /root/.bun/bin/bun install --trust -g https://github.com/tobi/qmd \
   && QMD_SRC=$(find /root/.bun /home -path "*/node_modules/@tobilu/qmd/src/qmd.ts" 2>/dev/null | head -1) \
   && if [ -z "$QMD_SRC" ]; then echo "ERROR: qmd source not found after install" && exit 1; fi \
