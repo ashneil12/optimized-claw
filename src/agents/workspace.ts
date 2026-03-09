@@ -91,117 +91,85 @@ export function resolveBusinessModeEnabled(): boolean {
 }
 
 /**
+ * Generic helper to strip conditional marker blocks from a workspace file.
+ *
+ * When `enabled` is true: markers are removed, content between them is preserved.
+ * When `enabled` is false: entire blocks (markers + content) are removed.
+ *
+ * @param filePath - Path to the file to process
+ * @param ifMarker - Opening marker (e.g. `<!-- if-human-mode -->`)
+ * @param endMarker - Closing marker (e.g. `<!-- end-human-mode -->`)
+ * @param enabled - Whether the feature is active
+ */
+async function stripConditionalBlock(
+  filePath: string,
+  ifMarker: string,
+  endMarker: string,
+  enabled: boolean,
+): Promise<void> {
+  try {
+    const content = await fs.readFile(filePath, "utf-8");
+    if (!content.includes(ifMarker)) {
+      return; // No conditional markers — nothing to do
+    }
+
+    let result = content;
+    if (enabled) {
+      // Keep the content, just remove the markers themselves
+      result = result.replace(new RegExp(`\\s*${ifMarker}\\s*\\n?`, "g"), "\n");
+      result = result.replace(new RegExp(`\\s*${endMarker}\\s*\\n?`, "g"), "\n");
+    } else {
+      // Remove entire blocks between markers (including markers)
+      const regex = new RegExp(`\\s*${ifMarker}[\\s\\S]*?${endMarker}\\s*\\n?`, "g");
+      result = result.replace(regex, "\n");
+    }
+
+    if (result !== content) {
+      await fs.writeFile(filePath, result, "utf-8");
+    }
+  } catch {
+    // Silently skip — workspace file may not exist or be readable
+  }
+}
+
+/**
  * Strip `<!-- if-human-mode -->` / `<!-- end-human-mode -->` conditional blocks
  * from a workspace file based on whether human voice mode is enabled.
- *
- * If human mode is enabled, the markers are removed and content is preserved.
- * If human mode is disabled, the entire block (markers + content) is removed.
  */
 export async function removeHumanModeSectionFromSoul(
   filePath: string,
   humanModeEnabled: boolean,
 ): Promise<void> {
-  const IF_MARKER = "<!-- if-human-mode -->";
-  const END_MARKER = "<!-- end-human-mode -->";
-
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    if (!content.includes(IF_MARKER)) {
-      return; // No conditional markers — nothing to do
-    }
-
-    let result = content;
-    if (humanModeEnabled) {
-      // Keep the content, just remove the markers themselves
-      result = result.replace(new RegExp(`\\s*${IF_MARKER}\\s*\\n?`, "g"), "\n");
-      result = result.replace(new RegExp(`\\s*${END_MARKER}\\s*\\n?`, "g"), "\n");
-    } else {
-      // Remove entire blocks between markers (including markers)
-      const regex = new RegExp(`\\s*${IF_MARKER}[\\s\\S]*?${END_MARKER}\\s*\\n?`, "g");
-      result = result.replace(regex, "\n");
-    }
-
-    if (result !== content) {
-      await fs.writeFile(filePath, result, "utf-8");
-    }
-  } catch {
-    // Silently skip — workspace file may not exist or be readable
-  }
+  await stripConditionalBlock(
+    filePath,
+    "<!-- if-human-mode -->",
+    "<!-- end-human-mode -->",
+    humanModeEnabled,
+  );
 }
 
 /**
  * Strip `<!-- if-business-mode -->` / `<!-- end-business-mode -->` conditional blocks
  * from a workspace file based on whether business mode is enabled.
- *
- * If business mode is enabled, the markers are removed and content is preserved.
- * If business mode is disabled, the entire block (markers + content) is removed.
  */
 export async function removeBusinessModeSectionFromSoul(
   filePath: string,
   businessModeEnabled: boolean,
 ): Promise<void> {
-  const IF_MARKER = "<!-- if-business-mode -->";
-  const END_MARKER = "<!-- end-business-mode -->";
-
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    if (!content.includes(IF_MARKER)) {
-      return; // No conditional markers — nothing to do
-    }
-
-    let result = content;
-    if (businessModeEnabled) {
-      // Keep the content, just remove the markers themselves
-      result = result.replace(new RegExp(`\\s*${IF_MARKER}\\s*\\n?`, "g"), "\n");
-      result = result.replace(new RegExp(`\\s*${END_MARKER}\\s*\\n?`, "g"), "\n");
-    } else {
-      // Remove entire blocks between markers (including markers)
-      const regex = new RegExp(`\\s*${IF_MARKER}[\\s\\S]*?${END_MARKER}\\s*\\n?`, "g");
-      result = result.replace(regex, "\n");
-    }
-
-    if (result !== content) {
-      await fs.writeFile(filePath, result, "utf-8");
-    }
-  } catch {
-    // Silently skip — workspace file may not exist or be readable
-  }
+  await stripConditionalBlock(
+    filePath,
+    "<!-- if-business-mode -->",
+    "<!-- end-business-mode -->",
+    businessModeEnabled,
+  );
 }
 
 /**
  * Strip `<!-- if-honcho -->` / `<!-- end-honcho -->` conditional blocks
  * from a workspace file based on whether Honcho is enabled.
- *
- * If Honcho is enabled, the markers are removed and content is preserved.
- * If Honcho is disabled, the entire block (markers + content) is removed.
  */
 async function stripHonchoConditionals(filePath: string, honchoEnabled: boolean): Promise<void> {
-  const IF_MARKER = "<!-- if-honcho -->";
-  const END_MARKER = "<!-- end-honcho -->";
-
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    if (!content.includes(IF_MARKER)) {
-      return; // No conditional markers — nothing to do
-    }
-
-    let result = content;
-    if (honchoEnabled) {
-      // Keep the content, just remove the markers themselves
-      result = result.replace(new RegExp(`\\s*${IF_MARKER}\\s*\\n?`, "g"), "\n");
-      result = result.replace(new RegExp(`\\s*${END_MARKER}\\s*\\n?`, "g"), "\n");
-    } else {
-      // Remove entire blocks between markers (including markers)
-      const regex = new RegExp(`\\s*${IF_MARKER}[\\s\\S]*?${END_MARKER}\\s*\\n?`, "g");
-      result = result.replace(regex, "\n");
-    }
-
-    if (result !== content) {
-      await fs.writeFile(filePath, result, "utf-8");
-    }
-  } catch {
-    // Silently skip — workspace file may not exist or be readable
-  }
+  await stripConditionalBlock(filePath, "<!-- if-honcho -->", "<!-- end-honcho -->", honchoEnabled);
 }
 
 /**
