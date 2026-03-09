@@ -5,6 +5,22 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Remove Slim Docker Build Variant (2026-03-09)
+
+**Purpose:** Drop the `bookworm-slim` Docker image variant from CI. The slim base saved ~270MB upfront but the runtime stage installs the full agent CLI tooling (python3, ffmpeg, pandoc, etc.) unconditionally, negating most of the size savings. Building both variants doubled CI build time for negligible benefit.
+
+### Changes
+
+| File                                   | Change                                               | Why                                                 |
+| -------------------------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| `.github/workflows/docker-release.yml` | Removed slim tag resolution and slim build-push step | Eliminates the second full image build+push from CI |
+
+### Upstream Sync Risk
+
+**None.** CI workflow is fully custom.
+
+---
+
 ## Hermes-Inspired Features — Trajectory Compression, Session Search & Skill Auto-Creation (2026-03-09)
 
 **Purpose:** Implement three agent-improvement features inspired by the [Hermes Agent](https://github.com/NousResearch/hermes-agent): smarter context carryover via trajectory compression, exact keyword search for conversation history, and autonomous skill document management.

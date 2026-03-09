@@ -145,17 +145,17 @@ These exist in upstream AND have local changes. Conflicts are likely.
 
 ### CI Workflows
 
-| File                                         | What to preserve                                        |
-| -------------------------------------------- | ------------------------------------------------------- |
-| `.github/workflows/ci.yml`                   | `ubuntu-latest` / `windows-latest` (not `blacksmith-*`) |
-| `.github/workflows/docker-release.yml`       | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/install-smoke.yml`        | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/workflow-sanity.yml`      | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/sandbox-common-smoke.yml` | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/labeler.yml`              | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/stale.yml`                | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/auto-response.yml`        | `ubuntu-latest` (not `blacksmith-*`)                    |
-| `.github/workflows/docker-build.yml`         | Custom `build-browser` job                              |
+| File                                         | What to preserve                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `.github/workflows/ci.yml`                   | `ubuntu-latest` / `windows-latest` (not `blacksmith-*`)                              |
+| `.github/workflows/docker-release.yml`       | `ubuntu-latest` (not `blacksmith-*`); slim variant removed (single image build only) |
+| `.github/workflows/install-smoke.yml`        | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/workflow-sanity.yml`      | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/sandbox-common-smoke.yml` | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/labeler.yml`              | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/stale.yml`                | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/auto-response.yml`        | `ubuntu-latest` (not `blacksmith-*`)                                                 |
+| `.github/workflows/docker-build.yml`         | Custom `build-browser` job                                                           |
 
 ---
 
