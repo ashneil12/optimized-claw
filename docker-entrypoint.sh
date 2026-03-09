@@ -439,7 +439,18 @@ fi  # end OPENCLAW_MANAGED_PLATFORM auto-onboard guard
 # Defaults to true for security
 ACIP_ENABLED="${OPENCLAW_ACIP_ENABLED:-true}"
 
-if [ -f "/app/SOUL.md" ]; then
+# Business mode: when OPENCLAW_BUSINESS_MODE_ENABLED=true (or OPENCLAW_BUSINESS_MODE=1),
+# SOUL.md is overwritten with business guide content by ensureAgentWorkspace().
+# Skip the entrypoint's hardcoded SOUL.md deployment to avoid clobbering it.
+BUSINESS_MODE="${OPENCLAW_BUSINESS_MODE:-}"
+BUSINESS_MODE_ENABLED="${OPENCLAW_BUSINESS_MODE_ENABLED:-}"
+SKIP_SOUL_DEPLOY=false
+if [ "$BUSINESS_MODE" = "1" ] || [ "$BUSINESS_MODE_ENABLED" = "true" ] || [ "$BUSINESS_MODE_ENABLED" = "1" ]; then
+  SKIP_SOUL_DEPLOY=true
+  echo "[entrypoint] Business mode active — SOUL.md will be managed by ensureAgentWorkspace()"
+fi
+
+if [ -f "/app/SOUL.md" ] && [ "$SKIP_SOUL_DEPLOY" = "false" ]; then
   mkdir -p "$WORKSPACE_DIR"
   echo "[entrypoint] Setting up security rules (SOUL.md)..."
   
@@ -467,11 +478,23 @@ if [ -f "/app/SOUL.md" ]; then
   else
       echo "[entrypoint] ACIP Security disabled (OPENCLAW_ACIP_ENABLED=$ACIP_ENABLED). Skipping ACIP_SECURITY.md deployment."
   fi
+else
+  if [ "$SKIP_SOUL_DEPLOY" = "true" ]; then
+    # Business mode: still deploy ACIP_SECURITY.md (it's independent of SOUL.md)
+    mkdir -p "$WORKSPACE_DIR"
+    if [ "$ACIP_ENABLED" = "true" ] || [ "$ACIP_ENABLED" = "1" ]; then
+      if [ -f "/app/ACIP_SECURITY.md" ]; then
+        cp /app/ACIP_SECURITY.md "$WORKSPACE_DIR/ACIP_SECURITY.md"
+        chmod 444 "$WORKSPACE_DIR/ACIP_SECURITY.md"
+        echo "[entrypoint] Deployed ACIP_SECURITY.md (business mode — SOUL.md deferred)."
+      fi
+    fi
+  fi
 fi
 
 # Template-render model routing in SOUL.md
 # SOUL.md contains {{TOKEN}} placeholders in the routing table — replace with actual model names
-if [ -f "$WORKSPACE_DIR/SOUL.md" ]; then
+if [ -f "$WORKSPACE_DIR/SOUL.md" ] && [ "$SKIP_SOUL_DEPLOY" = "false" ]; then
   chmod 644 "$WORKSPACE_DIR/SOUL.md"
   sed -i \
     -e "s|{{PRIMARY_MODEL}}|${COMPLEX_MODEL:-not-configured}|g" \

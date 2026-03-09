@@ -577,6 +577,11 @@ export async function ensureAgentWorkspace(params?: {
     // Overwrite SOUL.md entirely with business template content.
     // Skip conditional stripping — the file is being replaced wholesale.
     const businessTemplate = await loadTemplate(DEFAULT_BUSINESS_GUIDE_FILENAME);
+    console.log(
+      `[workspace] business mode ON → overwriting SOUL.md (${soulPath}) with business template (${businessTemplate.length} chars)`,
+    );
+    // Ensure writable — docker-entrypoint.sh sets chmod 444 on SOUL.md
+    await fs.chmod(soulPath, 0o644).catch(() => {});
     await fs.writeFile(soulPath, businessTemplate, "utf-8");
     if (state.soulOverride !== "business") {
       markState({ soulOverride: "business" });
@@ -587,6 +592,11 @@ export async function ensureAgentWorkspace(params?: {
 
     if (state.soulOverride === "business") {
       // Business mode was on but now off — restore original SOUL.md
+      console.log(
+        `[workspace] business mode OFF (was ON) → restoring original SOUL.md (${soulPath})`,
+      );
+      // Ensure writable — docker-entrypoint.sh sets chmod 444 on SOUL.md
+      await fs.chmod(soulPath, 0o644).catch(() => {});
       await fs.writeFile(soulPath, soulTemplate, "utf-8");
       // Re-apply conditional stripping to the freshly restored template
       await stripHonchoConditionals(soulPath, honchoEnabled);
