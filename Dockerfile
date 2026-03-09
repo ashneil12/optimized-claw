@@ -135,6 +135,9 @@ COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 COPY --from=runtime-assets --chown=node:node /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=runtime-assets --chown=node:node /app/enforce-config.mjs ./enforce-config.mjs
+COPY --from=runtime-assets --chown=node:node /app/SOUL.md ./SOUL.md
+COPY --from=runtime-assets --chown=node:node /app/ACIP_SECURITY.md ./ACIP_SECURITY.md
 
 # Keep pnpm available in the runtime image for container-local workflows.
 # Use a shared Corepack home so the non-root `node` user does not need a

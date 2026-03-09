@@ -470,9 +470,11 @@ if [ -n "$SOUL_SOURCE" ]; then
 
   cp "$SOUL_SOURCE" "$WORKSPACE_DIR/SOUL.md"
 
-  # Strip YAML frontmatter (--- delimited block at start) if present
+  # Strip YAML frontmatter (---\n...\n--- block at start of file) if present
   if head -1 "$WORKSPACE_DIR/SOUL.md" | grep -q '^---$'; then
-    sed -i '1{/^---$/,/^---$/d}' "$WORKSPACE_DIR/SOUL.md"
+    awk 'BEGIN{skip=0; count=0} /^---$/{count++; if(count<=2){skip=1; next}} {if(count>=2){skip=0}; if(!skip) print}' \
+      "$WORKSPACE_DIR/SOUL.md" > "$WORKSPACE_DIR/SOUL.md.tmp" && \
+      mv "$WORKSPACE_DIR/SOUL.md.tmp" "$WORKSPACE_DIR/SOUL.md"
   fi
 
   # Set strict read-only permissions so the agent can't easily modify it
