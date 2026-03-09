@@ -507,6 +507,15 @@ describe("agents.files.list", () => {
     mocks.loadConfigReturn = {};
   });
 
+  it("ensures the workspace before listing files", async () => {
+    await listAgentFileNames();
+
+    expect(mocks.ensureAgentWorkspace).toHaveBeenCalledWith({
+      dir: "/workspace/test-agent",
+      ensureBootstrapFiles: true,
+    });
+  });
+
   it("includes BOOTSTRAP.md when onboarding has not completed", async () => {
     const names = await listAgentFileNames();
     expect(names).toContain("BOOTSTRAP.md");
@@ -531,6 +540,37 @@ describe("agents.files.list", () => {
 
     const names = await listAgentFileNames();
     expect(names).toContain("BOOTSTRAP.md");
+  });
+});
+
+describe("agents.files.get/set bootstrap initialization", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadConfigReturn = {};
+  });
+
+  it("ensures the workspace before reading files", async () => {
+    const { promise } = makeCall("agents.files.get", { agentId: "main", name: "BOOTSTRAP.md" });
+    await promise;
+
+    expect(mocks.ensureAgentWorkspace).toHaveBeenCalledWith({
+      dir: "/workspace/test-agent",
+      ensureBootstrapFiles: true,
+    });
+  });
+
+  it("ensures the workspace before writing files", async () => {
+    const { promise } = makeCall("agents.files.set", {
+      agentId: "main",
+      name: "AGENTS.md",
+      content: "updated\n",
+    });
+    await promise;
+
+    expect(mocks.ensureAgentWorkspace).toHaveBeenCalledWith({
+      dir: "/workspace/test-agent",
+      ensureBootstrapFiles: true,
+    });
   });
 });
 

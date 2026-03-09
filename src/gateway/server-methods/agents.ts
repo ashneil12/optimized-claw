@@ -65,6 +65,16 @@ const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME]
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
 
+async function ensureWorkspaceReadyForFileAccess(
+  cfg: ReturnType<typeof loadConfig>,
+  workspaceDir: string,
+): Promise<void> {
+  await ensureAgentWorkspace({
+    dir: workspaceDir,
+    ensureBootstrapFiles: !cfg.agents?.defaults?.skipBootstrap,
+  });
+}
+
 function resolveAgentWorkspaceFileOrRespondError(
   params: Record<string, unknown>,
   respond: RespondFn,
@@ -107,6 +117,7 @@ type ResolvedAgentWorkspaceFilePath =
       requestPath: string;
       ioPath: string;
       workspaceReal: string;
+      followedFinalSymlink: boolean;
     }
   | {
       kind: "missing";
@@ -232,7 +243,13 @@ async function resolveAgentWorkspaceFilePath(params: {
     if (targetStat.nlink > 1) {
       return { kind: "invalid", requestPath, reason: "hardlinked file path not allowed" };
     }
-    return { kind: "ready", requestPath, ioPath: targetReal, workspaceReal };
+    return {
+      kind: "ready",
+      requestPath,
+      ioPath: targetReal,
+      workspaceReal,
+      followedFinalSymlink: true,
+    };
   }
 
   if (!candidateLstat.isFile()) {
@@ -243,7 +260,13 @@ async function resolveAgentWorkspaceFilePath(params: {
   }
 
   const targetReal = await fs.realpath(candidatePath).catch(() => candidatePath);
-  return { kind: "ready", requestPath, ioPath: targetReal, workspaceReal };
+  return {
+    kind: "ready",
+    requestPath,
+    ioPath: targetReal,
+    workspaceReal,
+    followedFinalSymlink: false,
+  };
 }
 
 async function statFileSafely(filePath: string): Promise<FileMeta | null> {
@@ -651,6 +674,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    await ensureWorkspaceReadyForFileAccess(cfg, workspaceDir);
     let hideBootstrap = false;
     try {
       hideBootstrap = await isWorkspaceOnboardingCompleted(workspaceDir);
@@ -670,6 +694,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { agentId, workspaceDir, name } = resolved;
+    await ensureWorkspaceReadyForFileAccess(resolved.cfg, workspaceDir);
     const filePath = path.join(workspaceDir, name);
     const resolvedPath = await resolveWorkspaceFilePathOrRespond({
       respond,
@@ -721,7 +746,7 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { agentId, workspaceDir, name } = resolved;
-    await fs.mkdir(workspaceDir, { recursive: true });
+    await ensureWorkspaceReadyForFileAccess(resolved.cfg, workspaceDir);
     const filePath = path.join(workspaceDir, name);
     const resolvedPath = await resolveWorkspaceFilePathOrRespond({
       respond,
@@ -729,6 +754,10 @@ export const agentsHandlers: GatewayRequestHandlers = {
       name,
     });
     if (!resolvedPath) {
+      return;
+    }
+    if (resolvedPath.kind === "ready" && resolvedPath.followedFinalSymlink) {
+      respondWorkspaceFileUnsafe(respond, name);
       return;
     }
     const content = String(params.content ?? "");
