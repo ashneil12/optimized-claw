@@ -59,9 +59,8 @@ HEARTBEAT_MODEL="${OPENCLAW_HEARTBEAT_MODEL:-${HEARTBEAT_MODEL:-}}"
 HEARTBEAT_INTERVAL="${OPENCLAW_HEARTBEAT_INTERVAL:-15m}"
 FALLBACK_MODELS_RAW="${OPENCLAW_FALLBACK_MODELS:-}"
 
-# Capability-specific models for prompt-based routing
-# These inject model names into SOUL_DELEGATION_SNIPPET.md so the agent
-# uses sessions_spawn(model: "...") with the right model per task type
+# Capability-specific models for prompt-based routing (used by self-hosted users
+# who configure per-task-type model selection via OPERATIONS.md delegation tables)
 CODING_MODEL="${OPENCLAW_CODING_MODEL:-${DEFAULT_MODEL}}"
 WRITING_MODEL="${OPENCLAW_WRITING_MODEL:-${DEFAULT_MODEL}}"
 SEARCH_MODEL="${OPENCLAW_SEARCH_MODEL:-${DEFAULT_MODEL}}"
@@ -440,73 +439,64 @@ fi  # end OPENCLAW_MANAGED_PLATFORM auto-onboard guard
 ACIP_ENABLED="${OPENCLAW_ACIP_ENABLED:-true}"
 
 # Business mode: when OPENCLAW_BUSINESS_MODE_ENABLED=true (or OPENCLAW_BUSINESS_MODE=1),
-# SOUL.md is overwritten with business guide content by ensureAgentWorkspace().
-# Skip the entrypoint's hardcoded SOUL.md deployment to avoid clobbering it.
+# deploy the business guide template as SOUL.md instead of the standard version.
 BUSINESS_MODE="${OPENCLAW_BUSINESS_MODE:-}"
 BUSINESS_MODE_ENABLED="${OPENCLAW_BUSINESS_MODE_ENABLED:-}"
-SKIP_SOUL_DEPLOY=false
+IS_BUSINESS_MODE=false
 if [ "$BUSINESS_MODE" = "1" ] || [ "$BUSINESS_MODE_ENABLED" = "true" ] || [ "$BUSINESS_MODE_ENABLED" = "1" ]; then
-  SKIP_SOUL_DEPLOY=true
-  echo "[entrypoint] Business mode active — SOUL.md will be managed by ensureAgentWorkspace()"
+  IS_BUSINESS_MODE=true
 fi
 
-if [ -f "/app/SOUL.md" ] && [ "$SKIP_SOUL_DEPLOY" = "false" ]; then
+# Resolve the SOUL.md source file based on mode
+BUSINESS_TEMPLATE="/app/docs/reference/templates/openclaw-business-v1.md"
+if [ "$IS_BUSINESS_MODE" = "true" ] && [ -f "$BUSINESS_TEMPLATE" ]; then
+  SOUL_SOURCE="$BUSINESS_TEMPLATE"
+  echo "[entrypoint] Business mode active — deploying business guide as SOUL.md"
+elif [ -f "/app/SOUL.md" ]; then
+  SOUL_SOURCE="/app/SOUL.md"
+else
+  SOUL_SOURCE=""
+fi
+
+if [ -n "$SOUL_SOURCE" ]; then
   mkdir -p "$WORKSPACE_DIR"
-  echo "[entrypoint] Setting up security rules (SOUL.md)..."
+  echo "[entrypoint] Setting up SOUL.md from: $SOUL_SOURCE"
   
   # Remove existing readonly file if it exists so we can update it
   if [ -f "$WORKSPACE_DIR/SOUL.md" ]; then
+    chmod 644 "$WORKSPACE_DIR/SOUL.md" 2>/dev/null || true
     rm -f "$WORKSPACE_DIR/SOUL.md"
   fi
 
-  # Always start with SOUL.md as the base (operational instructions, delegation, routing, etc.)
-  cp /app/SOUL.md "$WORKSPACE_DIR/SOUL.md"
+  cp "$SOUL_SOURCE" "$WORKSPACE_DIR/SOUL.md"
 
-  # Set strict read-only permissions for the SOUL file so it can't be easily modified by the agent itself
+  # Strip YAML frontmatter (--- delimited block at start) if present
+  if head -1 "$WORKSPACE_DIR/SOUL.md" | grep -q '^---$'; then
+    sed -i '1{/^---$/,/^---$/d}' "$WORKSPACE_DIR/SOUL.md"
+  fi
+
+  # Set strict read-only permissions so the agent can't easily modify it
   chmod 444 "$WORKSPACE_DIR/SOUL.md"
+fi
 
-  # Deploy ACIP_SECURITY.md as a standalone readable workspace reference file
-  # The orchestrator's SOUL.md instructs it to inject ACIP into sub-agent tasks for external-facing work
-  if [ "$ACIP_ENABLED" = "true" ] || [ "$ACIP_ENABLED" = "1" ]; then
-      if [ -f "/app/ACIP_SECURITY.md" ]; then
-          cp /app/ACIP_SECURITY.md "$WORKSPACE_DIR/ACIP_SECURITY.md"
-          chmod 444 "$WORKSPACE_DIR/ACIP_SECURITY.md"
-          echo "[entrypoint] Deployed ACIP_SECURITY.md as workspace reference (context-based injection)."
-      else
-          echo "[entrypoint] WARNING: ACIP_SECURITY.md not found in image. External sub-agents will lack security hardening."
-      fi
+# Deploy ACIP_SECURITY.md (independent of which SOUL.md variant is used)
+if [ "$ACIP_ENABLED" = "true" ] || [ "$ACIP_ENABLED" = "1" ]; then
+  mkdir -p "$WORKSPACE_DIR"
+  if [ -f "/app/ACIP_SECURITY.md" ]; then
+    cp /app/ACIP_SECURITY.md "$WORKSPACE_DIR/ACIP_SECURITY.md"
+    chmod 444 "$WORKSPACE_DIR/ACIP_SECURITY.md"
+    echo "[entrypoint] Deployed ACIP_SECURITY.md as workspace reference."
   else
-      echo "[entrypoint] ACIP Security disabled (OPENCLAW_ACIP_ENABLED=$ACIP_ENABLED). Skipping ACIP_SECURITY.md deployment."
+    echo "[entrypoint] WARNING: ACIP_SECURITY.md not found in image."
   fi
 else
-  if [ "$SKIP_SOUL_DEPLOY" = "true" ]; then
-    # Business mode: still deploy ACIP_SECURITY.md (it's independent of SOUL.md)
-    mkdir -p "$WORKSPACE_DIR"
-    if [ "$ACIP_ENABLED" = "true" ] || [ "$ACIP_ENABLED" = "1" ]; then
-      if [ -f "/app/ACIP_SECURITY.md" ]; then
-        cp /app/ACIP_SECURITY.md "$WORKSPACE_DIR/ACIP_SECURITY.md"
-        chmod 444 "$WORKSPACE_DIR/ACIP_SECURITY.md"
-        echo "[entrypoint] Deployed ACIP_SECURITY.md (business mode — SOUL.md deferred)."
-      fi
-    fi
-  fi
+  echo "[entrypoint] ACIP Security disabled (OPENCLAW_ACIP_ENABLED=$ACIP_ENABLED)."
 fi
 
-# Template-render model routing in SOUL.md
-# SOUL.md contains {{TOKEN}} placeholders in the routing table — replace with actual model names
-if [ -f "$WORKSPACE_DIR/SOUL.md" ] && [ "$SKIP_SOUL_DEPLOY" = "false" ]; then
-  chmod 644 "$WORKSPACE_DIR/SOUL.md"
-  sed -i \
-    -e "s|{{PRIMARY_MODEL}}|${COMPLEX_MODEL:-not-configured}|g" \
-    -e "s|{{SUBAGENT_MODEL}}|${SUBAGENT_MODEL:-not-configured}|g" \
-    -e "s|{{CODING_MODEL}}|${CODING_MODEL:-${DEFAULT_MODEL:-not-configured}}|g" \
-    -e "s|{{WRITING_MODEL}}|${WRITING_MODEL:-${DEFAULT_MODEL:-not-configured}}|g" \
-    -e "s|{{SEARCH_MODEL}}|${SEARCH_MODEL:-${DEFAULT_MODEL:-not-configured}}|g" \
-    -e "s|{{IMAGE_MODEL}}|${IMAGE_MODEL:-${DEFAULT_MODEL:-not-configured}}|g" \
-    "$WORKSPACE_DIR/SOUL.md"
-  chmod 444 "$WORKSPACE_DIR/SOUL.md"
-  echo "[entrypoint] Model routing configured: coding=${CODING_MODEL:-default} writing=${WRITING_MODEL:-default} search=${SEARCH_MODEL:-default} image=${IMAGE_MODEL:-default}"
-fi
+# NOTE: {{TOKEN}} model routing sed replacements were removed.
+# SOUL.md no longer contains model routing placeholders — operational content
+# (delegation, model routing) lives in OPERATIONS.md, which is managed by
+# ensureAgentWorkspace() and doesn't need entrypoint sed processing.
 
 # NOTE: IDENTITY.md, WORKING.md, memory/, self-review.md, open-loops.md, and
 # HEARTBEAT.md are NO LONGER deployed here. They are seeded by ensureAgentWorkspace()
