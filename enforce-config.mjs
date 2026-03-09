@@ -193,19 +193,14 @@ function env(name, defaultValue = "") {
   return process.env[name]?.trim() || defaultValue;
 }
 
-/** Map a self-reflection frequency string to diary/identity interval milliseconds. */
+/**
+ * Determine whether reflection cron jobs should be enabled.
+ * Accepts 'enabled'/'disabled' (new) and 'high'/'normal'/'low' (legacy compat).
+ */
 function resolveReflectionIntervals(freq) {
-  switch (freq) {
-    case "high":
-      return { diaryMs: 10800000, identityMs: 43200000, reflectionEnabled: true }; // 3h / 12h
-    case "low":
-      return { diaryMs: 43200000, identityMs: 259200000, reflectionEnabled: true }; // 12h / 3d
-    case "disabled":
-      return { diaryMs: 21600000, identityMs: 86400000, reflectionEnabled: false }; // intervals don't matter
-    case "normal":
-    default:
-      return { diaryMs: 21600000, identityMs: 86400000, reflectionEnabled: true }; // 6h / 24h
-  }
+  return {
+    reflectionEnabled: freq !== "disabled",
+  };
 }
 
 /** Check if a string is truthy ("true" or "1"). */

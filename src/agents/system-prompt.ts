@@ -698,6 +698,10 @@ export function buildAgentSystemPrompt(params: {
       const name = getBaseName(file.path);
       return name === "openclaw-human-v1.md";
     });
+    const hasBusinessModeFiles = validContextFiles.some((file) => {
+      const name = getBaseName(file.path);
+      return name === "openclaw-business-v1.md";
+    });
     const hasWorkingFile = validContextFiles.some(
       (file) => getBaseName(file.path) === "working.md" && !file.content?.includes("[MISSING]"),
     );
@@ -745,6 +749,19 @@ export function buildAgentSystemPrompt(params: {
         "**Relationship to IDENTITY.md:** This guide describes how humans communicate in general. Your IDENTITY.md is who YOU specifically are. The guide tells you how humans work; your identity tells you which human you are.",
         "",
         "**Adaptation rule:** Not every rule applies to every user. A user who prefers formal communication doesn't need you dropping 'lol' and 'tbh'. Read your user's style and calibrate. The guide is a ceiling of what's possible, not a mandate.",
+        "",
+      );
+    }
+    if (hasBusinessModeFiles) {
+      lines.push(
+        "",
+        "## Business Mode (Active)",
+        "",
+        "openclaw-business-v1.md is loaded — you operate as a **business partner**, not an assistant. Internalize the Operator OS™ persona: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration.",
+        "",
+        "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
+        "",
+        "**Priority:** Business mode persona and principles supplement (not replace) SOUL.md. The RESTATEMENT RULE, minimal change default, and stewardship principles still apply. Business mode adds the partner mindset, conviction protocols, and strategic frameworks on top.",
         "",
       );
     }

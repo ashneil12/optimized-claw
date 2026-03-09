@@ -38,6 +38,8 @@ export const DEFAULT_OPERATIONS_FILENAME = "OPERATIONS.md";
 export const DEFAULT_PRACTICAL_FILENAME = "PRACTICAL.md";
 export const DEFAULT_MEMORY_HYGIENE_FILENAME = "memory-hygiene.md";
 export const DEFAULT_HUMAN_GUIDE_FILENAME = "openclaw-human-v1.md";
+export const DEFAULT_BUSINESS_GUIDE_FILENAME = "openclaw-business-v1.md";
+const DEFAULT_BUSINESS_DOCS_DIRNAME = "business";
 const WORKSPACE_STATE_DIRNAME = ".openclaw";
 const WORKSPACE_STATE_FILENAME = "workspace-state.json";
 const WORKSPACE_STATE_VERSION = 1;
@@ -70,6 +72,25 @@ export function resolveHumanModeEnabled(): boolean {
 }
 
 /**
+ * Check if business mode is enabled.
+ * Defaults to FALSE — business mode is off unless explicitly enabled
+ * via OPENCLAW_BUSINESS_MODE=1 or OPENCLAW_BUSINESS_MODE_ENABLED=true.
+ * When enabled, openclaw-business-v1.md and business/ docs are seeded into the workspace.
+ * When disabled, references to these files are removed from SOUL.md.
+ */
+export function resolveBusinessModeEnabled(): boolean {
+  const short = process.env.OPENCLAW_BUSINESS_MODE?.trim();
+  if (short === "1") {
+    return true;
+  }
+  const long = process.env.OPENCLAW_BUSINESS_MODE_ENABLED?.trim();
+  if (long === "true" || long === "1") {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Strip `<!-- if-human-mode -->` / `<!-- end-human-mode -->` conditional blocks
  * from a workspace file based on whether human voice mode is enabled.
  *
@@ -91,6 +112,45 @@ export async function removeHumanModeSectionFromSoul(
 
     let result = content;
     if (humanModeEnabled) {
+      // Keep the content, just remove the markers themselves
+      result = result.replace(new RegExp(`\\s*${IF_MARKER}\\s*\\n?`, "g"), "\n");
+      result = result.replace(new RegExp(`\\s*${END_MARKER}\\s*\\n?`, "g"), "\n");
+    } else {
+      // Remove entire blocks between markers (including markers)
+      const regex = new RegExp(`\\s*${IF_MARKER}[\\s\\S]*?${END_MARKER}\\s*\\n?`, "g");
+      result = result.replace(regex, "\n");
+    }
+
+    if (result !== content) {
+      await fs.writeFile(filePath, result, "utf-8");
+    }
+  } catch {
+    // Silently skip — workspace file may not exist or be readable
+  }
+}
+
+/**
+ * Strip `<!-- if-business-mode -->` / `<!-- end-business-mode -->` conditional blocks
+ * from a workspace file based on whether business mode is enabled.
+ *
+ * If business mode is enabled, the markers are removed and content is preserved.
+ * If business mode is disabled, the entire block (markers + content) is removed.
+ */
+export async function removeBusinessModeSectionFromSoul(
+  filePath: string,
+  businessModeEnabled: boolean,
+): Promise<void> {
+  const IF_MARKER = "<!-- if-business-mode -->";
+  const END_MARKER = "<!-- end-business-mode -->";
+
+  try {
+    const content = await fs.readFile(filePath, "utf-8");
+    if (!content.includes(IF_MARKER)) {
+      return; // No conditional markers — nothing to do
+    }
+
+    let result = content;
+    if (businessModeEnabled) {
       // Keep the content, just remove the markers themselves
       result = result.replace(new RegExp(`\\s*${IF_MARKER}\\s*\\n?`, "g"), "\n");
       result = result.replace(new RegExp(`\\s*${END_MARKER}\\s*\\n?`, "g"), "\n");
@@ -141,6 +201,33 @@ async function stripHonchoConditionals(filePath: string, honchoEnabled: boolean)
     }
   } catch {
     // Silently skip — workspace file may not exist or be readable
+  }
+}
+
+/**
+ * Recursively copy a directory tree, using writeFileIfMissing semantics.
+ * Files that already exist in the destination are NOT overwritten.
+ * This preserves user modifications while seeding new template files.
+ */
+async function copyDirectoryRecursive(srcDir: string, dstDir: string): Promise<void> {
+  await fs.mkdir(dstDir, { recursive: true });
+  const entries = await fs.readdir(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === ".DS_Store") {
+      continue;
+    }
+    const srcPath = path.join(srcDir, entry.name);
+    const dstPath = path.join(dstDir, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectoryRecursive(srcPath, dstPath);
+    } else {
+      try {
+        const content = await fs.readFile(srcPath, "utf-8");
+        await writeFileIfMissing(dstPath, stripFrontMatter(content));
+      } catch {
+        // Skip unreadable files
+      }
+    }
   }
 }
 
@@ -254,6 +341,7 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_PRACTICAL_FILENAME
   | typeof DEFAULT_MEMORY_HYGIENE_FILENAME
   | typeof DEFAULT_HUMAN_GUIDE_FILENAME
+  | typeof DEFAULT_BUSINESS_GUIDE_FILENAME
   | (string & {});
 
 export type WorkspaceBootstrapFile = {
@@ -287,6 +375,7 @@ const VALID_BOOTSTRAP_NAMES: ReadonlySet<string> = new Set([
   DEFAULT_MEMORY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
   DEFAULT_HUMAN_GUIDE_FILENAME,
+  DEFAULT_BUSINESS_GUIDE_FILENAME,
   DEFAULT_OPERATIONS_FILENAME,
 ]);
 
@@ -509,6 +598,10 @@ export async function ensureAgentWorkspace(params?: {
   const humanModeEnabled = resolveHumanModeEnabled();
   await removeHumanModeSectionFromSoul(soulPath, humanModeEnabled);
 
+  // Business mode: strip conditional markers based on OPENCLAW_BUSINESS_MODE
+  const businessModeEnabled = resolveBusinessModeEnabled();
+  await removeBusinessModeSectionFromSoul(soulPath, businessModeEnabled);
+
   // Seed extra context files from templates
   const operationsPath = path.join(dir, DEFAULT_OPERATIONS_FILENAME);
   const practicalPath = path.join(dir, DEFAULT_PRACTICAL_FILENAME);
@@ -538,6 +631,37 @@ export async function ensureAgentWorkspace(params?: {
       } catch {
         // File may not exist — that's fine
       }
+    }
+  }
+
+  // Business mode: seed openclaw-business-v1.md and business/ docs when enabled
+  if (businessModeEnabled) {
+    const businessGuidePath = path.join(dir, DEFAULT_BUSINESS_GUIDE_FILENAME);
+    const businessGuideTemplate = await loadTemplate(DEFAULT_BUSINESS_GUIDE_FILENAME);
+    await writeFileIfMissing(businessGuidePath, businessGuideTemplate);
+
+    // Seed business knowledge docs from templates/business/ into workspace/business/
+    const templateDir = await resolveWorkspaceTemplateDir();
+    const businessTemplateDir = path.join(templateDir, DEFAULT_BUSINESS_DOCS_DIRNAME);
+    const businessWorkspaceDir = path.join(dir, DEFAULT_BUSINESS_DOCS_DIRNAME);
+    try {
+      await copyDirectoryRecursive(businessTemplateDir, businessWorkspaceDir);
+    } catch (err) {
+      // Business docs may not be available in all deployments
+      console.warn(`[workspace] Could not seed business docs: ${String(err)}`);
+    }
+  }
+
+  // Business mode: delete workspace business files when flagged (two-step disable)
+  if (!businessModeEnabled && process.env.OPENCLAW_BUSINESS_DELETE_FILES?.trim() === "true") {
+    const businessWorkspaceDir = path.join(dir, DEFAULT_BUSINESS_DOCS_DIRNAME);
+    const businessGuidePath = path.join(dir, DEFAULT_BUSINESS_GUIDE_FILENAME);
+    try {
+      await fs.rm(businessWorkspaceDir, { recursive: true, force: true });
+      await fs.unlink(businessGuidePath).catch(() => {});
+      console.log("[workspace] Deleted business files from workspace (user requested cleanup)");
+    } catch {
+      // Already cleaned up or doesn't exist
     }
   }
 
@@ -721,6 +845,10 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
     {
       name: DEFAULT_HUMAN_GUIDE_FILENAME,
       filePath: path.join(resolvedDir, DEFAULT_HUMAN_GUIDE_FILENAME),
+    },
+    {
+      name: DEFAULT_BUSINESS_GUIDE_FILENAME,
+      filePath: path.join(resolvedDir, DEFAULT_BUSINESS_GUIDE_FILENAME),
     },
   ];
   for (const extra of extraContextFiles) {
