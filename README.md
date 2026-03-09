@@ -12,17 +12,18 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Node-%E2%89%A522-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node ≥22">
   <a href="https://github.com/openclaw/openclaw"><img src="https://img.shields.io/badge/Fork%20of-OpenClaw-FF4500?style=for-the-badge" alt="Fork of OpenClaw"></a>
+  <a href="https://openclawservers.com"><img src="https://img.shields.io/badge/OpenClaw-Servers-7C3AED?style=for-the-badge" alt="OpenClaw Servers"></a>
 </p>
 
 ---
 
 ## What is Optimized Claw?
 
-**Optimized Claw** is a production-hardened fork of [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant. It tracks upstream closely but ships battle-tested fixes, multi-agent isolation, security hardening, and infrastructure improvements needed to run OpenClaw reliably in production with multiple agents.
+**Optimized Claw** is a production-hardened fork of [OpenClaw](https://github.com/openclaw/openclaw) — the open-source personal AI assistant. It tracks upstream closely but ships battle-tested fixes, multi-agent structure, security hardening, and infrastructure improvements needed to run OpenClaw reliably in production with multiple agents.
 
-Everything from upstream works as-is. Optimized Claw adds the layer on top: per-agent browser isolation, consciousness loops, content security scanning, Docker reliability fixes, and tooling that makes multi-agent deployments actually stable.
+Everything from upstream works as-is. Optimized Claw adds the layer on top: per-agent browser containers, autonomous consciousness loops, content security, memory improvements, Docker reliability fixes, and tooling that makes multi-agent deployments actually stable.
 
-If you want a single-agent personal assistant, upstream OpenClaw is great. If you want to run a **team of agents** on a server, keeping them isolated, secure, and self-aware — this fork is for you.
+If you want a single-agent personal assistant, upstream OpenClaw is great. If you want to run a **team of agents** on a server, keeping them secure, self-aware, and structured for multi-agent operation — this fork is for you.
 
 The public brand is **Optimized Claw**, but the runtime, CLI, package layout, and config paths stay `openclaw` for upstream compatibility.
 
@@ -35,6 +36,7 @@ Optimized Claw is a better fit than stock upstream if you are:
 - running multiple long-lived agents on one gateway
 - deploying primarily with Docker or server-hosted infrastructure
 - relying on per-agent browser isolation and scoped credentials
+- wanting agents that autonomously self-improve, reflect, and maintain their own memory
 - using upstream channels like Matrix/Element, Telegram, Discord, Slack, or WhatsApp but wanting a more production-oriented baseline
 - keeping a fork in sync with upstream while preserving a known patch set
 
@@ -44,75 +46,85 @@ Optimized Claw is a better fit than stock upstream if you are:
 
 ### 🔒 Security
 
-| Feature               | Description                                                                                    |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| Content Scanner       | Two-stage scanning (regex + optional frontier model) with risk scoring on all external content |
-| Data Classification   | Three-tier classification (Confidential/Internal/Public) with PII detection                    |
-| Event Logger          | Structured JSONL event logging with PII redaction, log rotation, and queryable history         |
-| Scan-and-Log Pipeline | DRY wrapper used across browser, web-fetch, and cron — all external content is scanned         |
+| Feature                  | Description                                                                                                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ACIP](ACIP_SECURITY.md) | Advanced Cognitive Inoculation Prompt — baked into every agent. Defends against prompt injection, data exfiltration, and instruction manipulation across all external content and tool outputs |
+| Content Scanner          | Automatic content scanning with risk scoring on all external inputs (browser, web-fetch, cron). Scans everything agents touch from the outside world                                           |
+| Data Classification      | Three-tier classification (Confidential / Internal / Public) with PII detection                                                                                                                |
+| Event Logger             | Structured JSONL event logging with PII redaction, log rotation, and queryable history                                                                                                         |
 
-### 🤖 Multi-Agent Isolation
+### 🤖 Multi-Agent Architecture
 
-| Feature                      | Description                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| Per-Agent Browser Containers | Each agent gets a dedicated browser sandbox via Docker, not a shared browser                |
-| Per-Agent OAuth              | Removed credential inheritance — agents use only their own OAuth tokens                     |
-| Browser-Only Sandbox Mode    | New `browser-only` sandbox mode for agents that need browser access without full containers |
-| Agent Browser Routing Fix    | `createBrowserTool()` now passes `agentId` so agents route to their own containers          |
-| Per-Agent CLI Onboarding     | `--agent` and `--sync-all` flags for scoped credential setup                                |
+| Feature                      | Description                                                                                                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Structured Agent Workspaces  | Each agent gets a purpose-built directory layout (`memory/`, `knowledge/`, `skills/`, `diary.md`, `open-loops.md`, `IDENTITY.md`, etc.) seeded automatically at creation — no manual setup required |
+| Per-Agent Browser Containers | Each agent gets a dedicated browser sandbox via Docker, not a shared browser                                                                                                                        |
+| Per-Agent OAuth              | Removed credential inheritance — agents use only their own OAuth tokens                                                                                                                             |
+| Autonomous Self-Improvement  | Each agent runs its own consciousness loop, self-review, deep review, and nightly innovation — standalone by default, not relying on external orchestration                                         |
+| Pre-Seeded Cron Jobs         | 10 default cron jobs (reflection, maintenance, briefings, innovation, audits) automatically seeded per agent with `MAIN_ONLY_JOBS` filtering for sub-agents                                         |
+| Browser-Only Sandbox Mode    | `browser-only` sandbox mode for agents that need browser access without full containers                                                                                                             |
+| Agent Browser Routing        | `createBrowserTool()` passes `agentId` so agents route to their own containers                                                                                                                      |
+| Per-Agent CLI Onboarding     | `--agent` and `--sync-all` flags for scoped credential setup                                                                                                                                        |
 
 ### 🧠 Consciousness & Memory
 
-| Feature                      | Description                                                                |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| 3-Tier Reflection System     | Self-review (6h), consciousness loop (2h dynamic), deep-review (48h)       |
-| NEXT_WAKE Dynamic Scheduling | Agents control their own cron frequency via `NEXT_WAKE:` directives        |
-| Session Context Carryover    | Rolling `memory/session-context.md` persists context across session resets |
-| Knowledge Base Indexer       | Auto-scans `memory/knowledge/*.md` and builds a queryable `_index.md`      |
-| Memory File Templates        | Structured 10-section `MEMORY.md` template seeded on workspace creation    |
-| Nightly Innovation Job       | 5-phase autonomous building cron with backlog integration                  |
-| Morning Briefing             | Personalized daily summary with backlog surfacing                          |
-| Weekly Self-Audit            | 21-question strategic audit feeding improvement backlog                    |
+| Feature                                                      | Description                                                                                                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3-Tier Reflection System                                     | Self-review (12h), consciousness loop (5h default, dynamic via `NEXT_WAKE:`), deep-review (48h) — runs autonomously per agent              |
+| [Honcho](https://github.com/plastic-labs/honcho) Integration | Long-term memory baked into Docker image — auto-installed when `HONCHO_API_KEY` is set, gives agents persistent cross-session memory       |
+| Pre-Reset Memory Flush                                       | Deterministic memory flush before session reset — ensures no context is lost between compactions                                           |
+| Trajectory Compression                                       | Smarter session context carryover — preserves first/last turns verbatim, compresses middle via key decisions, tool usage, and user intents |
+| Session Search                                               | FTS5-powered keyword search across past conversations — complements embedding-based memory search                                          |
+| Session Context Carryover                                    | Rolling `memory/session-context.md` persists context across session resets                                                                 |
+| Skill Auto-Creation                                          | Agents create and manage their own skill documents autonomously in `workspace/skills/`                                                     |
+| Knowledge Base Indexer                                       | Auto-scans `memory/knowledge/*.md` and builds a queryable `_index.md`                                                                      |
+| Improvement Backlog                                          | Structured backlog system for self-generated improvement proposals with tiered triage (auto-implement / build-then-approve / propose-only) |
+| Nightly Innovation                                           | 5-phase autonomous building cron (2 AM) with backlog integration — agents build improvements overnight                                     |
+| Morning Briefing                                             | Personalized daily summary (8 AM) with backlog surfacing and correction-awareness                                                          |
+| Weekly Self-Audit                                            | 21-question strategic audit feeding the improvement backlog                                                                                |
+| Diary Archival & Continuity                                  | Automatic diary rotation with continuity summaries across archive boundaries                                                               |
+| Auto-Tidy                                                    | Scheduled workspace cleanup — prunes stale entries from MEMORY.md, open-loops, self-review, session-context, and backlog                   |
 
 ### 🐳 Docker & Deployment
 
 | Feature                   | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | CDP Host Header Fix       | `http.request()` workaround for Node.js `fetch()` silently dropping `Host` headers — without this, Docker hostnames fail |
-| CDP Host Proxy            | Python reverse proxy as belt-and-suspenders for Host header rewriting in containers                                      |
-| Honcho Plugin Pre-Bake    | Plugin baked during image build with `root` ownership to pass the plugin scanner                                         |
+| Honcho Plugin Pre-Bake    | Honcho memory plugin baked into Docker image with correct ownership — auto-activates when API key is provided            |
 | Browser Startup Sweep     | Auto-updates stale browser containers on gateway boot                                                                    |
-| Managed Platform Guards   | `OPENCLAW_MANAGED_PLATFORM` gating prevents self-update in hosted deployments                                            |
 | Pre-Installed CLI Tooling | `ffmpeg`, `imagemagick`, `pandoc`, `yt-dlp`, `sqlite3`, `ripgrep`, and 15+ more tools baked into Docker image            |
 | Diagnostics Toolkit       | System health checks: PID file, port reachability, error rate, disk space                                                |
 
 ### 🌐 Browser Control
 
-| Feature                  | Description                                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| Parallel Profile Listing | `Promise.all` replaces serial `for` loop — prevents timeout cascades with multiple remote profiles |
-| Stealth Evasion Scripts  | 8 Playwright stealth injections — `navigator.webdriver`, plugins, WebGL, `chrome.runtime`, etc.    |
-| Auto-Download Capture    | Browser downloads automatically route to per-agent workspace directories                           |
-| Profile Timeout Tuning   | Bumped from 3s to 5s for reliability with 5+ remote profiles                                       |
-| Sandbox Browser API      | HTTP/WebSocket proxy with noVNC for browser container access from the dashboard                    |
+| Feature                                                       | Description                                                                                                |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [Camofox](https://github.com/nicedaycode/camofox) Integration | Browser camouflage baked into container images — realistic fingerprint spoofing for anti-detection         |
+| Playwright Anti-Detection                                     | 8 evasion scripts covering `navigator.webdriver`, plugins, WebGL, `chrome.runtime`, iframe leaks, and more |
+| Parallel Profile Listing                                      | `Promise.all` replaces serial `for` loop — prevents timeout cascades with multiple remote profiles         |
+| Auto-Download Capture                                         | Browser downloads automatically route to per-agent workspace directories                                   |
+| Profile Timeout Tuning                                        | Bumped from 3s to 5s for reliability with 5+ remote profiles                                               |
+| Sandbox Browser API                                           | HTTP/WebSocket proxy with noVNC for browser container access                                               |
 
-### ⚡ Performance & Resilience
+### ⚡ Performance & Reliability
 
-| Feature                | Description                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| Async Control UI       | Replaced synchronous `fs.readFileSync` with async streaming for the gateway Control UI |
-| Telegram Media Timeout | 15s timeout on media downloads prevents hung downloads from blocking groups            |
-| Typing TTL Callback    | "⏳ Still thinking" feedback when LLM runs exceed the typing indicator TTL             |
-| Heartbeat Tuning       | Default interval changed from 30m to 1h to reduce unnecessary wakeups                  |
+| Feature                | Description                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| Telegram Media Timeout | 15s timeout on media downloads prevents hung downloads from blocking groups             |
+| Typing TTL Callback    | "⏳ Still thinking" feedback when LLM runs exceed the typing indicator TTL              |
+| Heartbeat Tuning       | Default interval changed from 30m to 1h to reduce unnecessary wakeups                   |
+| General Fixes          | Ongoing bug fixes, reliability improvements, and edge-case handling across the codebase |
 
-### 🛠️ Tooling
+### 🛠️ Agent Identity & Tooling
 
-| Feature         | Description                                                                           |
-| --------------- | ------------------------------------------------------------------------------------- |
-| SQL Tools       | `sql_query` (read-only memory index) + `sql_execute` (read-write workspace databases) |
-| Sansa Provider  | Additional model provider integration                                                 |
-| SOUL.md Rewrite | Actionable framework with 3-tier reflection, not philosophical essay                  |
-| OPERATIONS.md   | System update procedures, heartbeat docs, reflection system description               |
+| Feature                    | Description                                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOUL.md                    | Actionable identity framework — 3-tier reflection, Ouroboros ontological framing, 7 Biblical principles, Ship of Theseus protection. Not a philosophical essay — a constitution |
+| IDENTITY.md                | Per-agent identity document — relationship model, personality traits, communication preferences, CRITICAL rules promoted from self-review patterns                              |
+| System Prompt Enhancements | Architect-first thinking, stale identity nudges (72h mtime check), comprehensive tool guidance, human voice detection                                                           |
+| SQL Tools                  | `sql_query` (read-only memory index) + `sql_execute` (read-write workspace databases)                                                                                           |
+| Session Search Tool        | Agent-facing FTS5 search across past conversations                                                                                                                              |
+| Skill Management Tool      | Autonomous skill CRUD with safety boundaries and human-authored protection                                                                                                      |
 
 ---
 
@@ -121,8 +133,7 @@ Optimized Claw is a better fit than stock upstream if you are:
 Optimized Claw supports the same runtime surfaces as upstream OpenClaw, but the recommended fork install paths are:
 
 - **Git checkout** for direct control and easy upstream syncs
-- **GHCR images** for Docker and hosted deployments
-- **OCS** for one-click managed deployments
+- **GHCR images** for Docker deployments
 
 If your deployment tooling pulls container images directly, point it at:
 
@@ -134,10 +145,6 @@ If your workflow depends on Matrix/Element or other upstream channels, the exist
 ---
 
 ## Fresh Install
-
-### OCS
-
-Use **Open Cloud Servers (OCS)** if you want the managed, one-click path.
 
 ### Self-Hosted: macOS / Linux
 
@@ -187,7 +194,7 @@ Published images:
 
 If your current OpenClaw setup is already stable and doing everything you need, you probably **do not** need to move.
 
-Switch to Optimized Claw if you specifically want the fork-only behavior: multi-agent isolation, browser-container hardening, consciousness loops, hosted deployment guards, or the other production patches listed above.
+Switch to Optimized Claw if you specifically want the fork-only behavior: multi-agent structure, browser-container hardening, consciousness loops, or the other production patches listed above.
 
 ### Existing Source Checkout
 
@@ -228,18 +235,13 @@ To move to this fork, reinstall via:
 
 ---
 
-## One-Click Deploy
-
-For managed hosting, **Open Cloud Servers (OCS)** provides one-click deploy of Optimized Claw instances. Connect your channels, and it just works.
-
----
-
 ## Staying in Sync with Upstream
 
 Optimized Claw tracks `openclaw/openclaw` main branch. Custom patches are documented in:
 
 - **[LOCAL_PATCHES.md](LOCAL_PATCHES.md)** — Critical patches with per-file verification commands
 - **[OPENCLAW_CONTEXT.md](OPENCLAW_CONTEXT.md)** — Complete modification inventory with post-sync checklist
+- **[OPENCLAW_CHANGELOG.md](OPENCLAW_CHANGELOG.md)** — Full history of every custom change with rationale
 
 After every upstream sync:
 
@@ -262,14 +264,27 @@ Optimized Claw uses the same configuration as upstream OpenClaw. See:
 
 Fork-specific additions are documented in `OPENCLAW_CONTEXT.md`.
 
+### Fork-Specific Environment Variables
+
+These environment variables control features unique to Optimized Claw. Set them in your `docker-compose.yml` or shell environment:
+
+| Variable                         | Default | Description                                                                                                                                                                            |
+| -------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCLAW_BUSINESS_MODE_ENABLED` | `0`     | Enable Business Mode — transforms the agent into a strategic business partner with a 22KB guide and 64 knowledge documents across strategy, content, copywriting, operations, and more |
+| `HONCHO_API_KEY`                 | —       | Your [Honcho](https://github.com/plastic-labs/honcho) API key. When set, the Honcho memory plugin is auto-installed, giving agents persistent cross-session long-term memory           |
+| `OPENCLAW_HUMAN_MODE_ENABLED`    | `0`     | Enable human voice mode — makes agent communication more natural and conversational                                                                                                    |
+
 ---
 
 ## Credits
 
 Optimized Claw is built on top of [OpenClaw](https://github.com/openclaw/openclaw) by Peter Steinberger and the OpenClaw community. All upstream contributors are recognized.
 
+Many improvements in this fork were inspired by ideas and techniques shared across the AI agent community on Twitter/X. If you recognize a contribution that hasn't been credited, please reach out via [@ashneil12](https://twitter.com/ashneil12) and appropriate attribution will be added.
+
 - [OpenClaw](https://github.com/openclaw/openclaw) — upstream project
 - [OpenClaw Docs](https://docs.openclaw.ai) — documentation (applies to this fork)
+- [OpenClaw Servers](https://openclawservers.com) — managed hosting
 
 ## License
 
