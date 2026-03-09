@@ -669,28 +669,38 @@ export async function ensureAgentWorkspace(params?: {
     // Legacy migration path: if USER/IDENTITY diverged from templates, or if user-content
     // indicators exist, treat onboarding as complete and avoid recreating BOOTSTRAP for
     // already-onboarded workspaces.
-    const [identityContent, userContent] = await Promise.all([
-      fs.readFile(identityPath, "utf-8"),
-      fs.readFile(userPath, "utf-8"),
-    ]);
-    const hasUserContent = await (async () => {
-      const indicators = [
-        path.join(dir, "memory"),
-        path.join(dir, DEFAULT_MEMORY_FILENAME),
-        path.join(dir, ".git"),
-      ];
-      for (const indicator of indicators) {
-        try {
-          await fs.access(indicator);
-          return true;
-        } catch {
-          // continue
+    //
+    // IMPORTANT: Skip the hasUserContent heuristic for brand-new workspaces.
+    // This function creates memory/ and .git/ itself (lines above), so on a fresh
+    // workspace those dirs are NOT evidence of prior user activity — they're
+    // infrastructure we just seeded.  Checking them here would incorrectly mark
+    // onboarding as complete before BOOTSTRAP.md is ever created (the root cause
+    // of the "missing bootstrap on SaaS first deploy" bug).
+    let legacyOnboardingCompleted = false;
+    if (!isBrandNewWorkspace) {
+      const [identityContent, userContent] = await Promise.all([
+        fs.readFile(identityPath, "utf-8"),
+        fs.readFile(userPath, "utf-8"),
+      ]);
+      const hasUserContent = await (async () => {
+        const indicators = [
+          path.join(dir, "memory"),
+          path.join(dir, DEFAULT_MEMORY_FILENAME),
+          path.join(dir, ".git"),
+        ];
+        for (const indicator of indicators) {
+          try {
+            await fs.access(indicator);
+            return true;
+          } catch {
+            // continue
+          }
         }
-      }
-      return false;
-    })();
-    const legacyOnboardingCompleted =
-      identityContent !== identityTemplate || userContent !== userTemplate || hasUserContent;
+        return false;
+      })();
+      legacyOnboardingCompleted =
+        identityContent !== identityTemplate || userContent !== userTemplate || hasUserContent;
+    }
     if (legacyOnboardingCompleted) {
       markState({ onboardingCompletedAt: nowIso() });
     } else {

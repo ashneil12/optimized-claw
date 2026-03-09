@@ -150,6 +150,22 @@ describe("ensureAgentWorkspace", () => {
 
     await expectCompletedWithoutBootstrap(tempDir);
   });
+
+  it("preserves BOOTSTRAP.md across successive calls (SaaS fresh-deploy regression)", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+
+    // First call: simulates auto-onboard seeding the workspace.
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+    await expectBootstrapSeeded(tempDir);
+    expect((await readOnboardingState(tempDir)).onboardingCompletedAt).toBeUndefined();
+
+    // Second call: simulates gateway restart — BOOTSTRAP.md must survive.
+    // Before the fix, the legacy migration saw memory/ (created by the first call)
+    // and marked onboarding complete, hiding BOOTSTRAP.md forever.
+    await ensureAgentWorkspace({ dir: tempDir, ensureBootstrapFiles: true });
+    await expectBootstrapSeeded(tempDir);
+    expect((await readOnboardingState(tempDir)).onboardingCompletedAt).toBeUndefined();
+  });
 });
 
 describe("loadWorkspaceBootstrapFiles", () => {
