@@ -670,9 +670,9 @@ function enforceCore(configPath) {
       "Before context compaction, update WORKING.md with current task state and write any lasting notes to memory/YYYY-MM-DD.md. Reply with NO_REPLY if nothing to store.",
   };
 
-  // Bootstrap: increase per-file char limit so SOUL.md (~25K) and
+  // Bootstrap: increase per-file char limit so SOUL.md (~53K) and
   // openclaw-human-v1.md (~16K) are injected in full. Total budget (150K) accommodates this.
-  defaults.bootstrapMaxChars = 50_000;
+  defaults.bootstrapMaxChars = 100_000;
 
   // Context pruning
   defaults.contextPruning = {

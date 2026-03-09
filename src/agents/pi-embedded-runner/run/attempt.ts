@@ -1676,6 +1676,18 @@ export async function runEmbeddedAttempt(
           }
         }
 
+        // Bootstrap first-turn override: when BOOTSTRAP.md is present and this is the
+        // first message in a fresh session, prepend a short directive to the user's message.
+        // This places the bootstrap instruction at maximum proximity to the user turn,
+        // which is critical for cheaper models that ignore mid-system-prompt instructions.
+        const hasBootstrapFileForPrepend = hookAdjustedBootstrapFiles.some(
+          (f) => f.name === DEFAULT_BOOTSTRAP_FILENAME && !f.missing,
+        );
+        if (hasBootstrapFileForPrepend && prePromptMessageCount === 0) {
+          effectivePrompt = `[SYSTEM: BOOTSTRAP.md is present — this is a first-run workspace. You MUST follow the bootstrap protocol as your FIRST action. Do NOT respond casually or greet the user normally. Start with the bootstrap introduction as described in BOOTSTRAP.md.]\n\n${effectivePrompt}`;
+          log.debug("bootstrap: prepended first-turn bootstrap reminder to user prompt");
+        }
+
         log.debug(`embedded run prompt start: runId=${params.runId} sessionId=${params.sessionId}`);
         cacheTrace?.recordStage("prompt:before", {
           prompt: effectivePrompt,

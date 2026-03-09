@@ -706,18 +706,19 @@ export function buildAgentSystemPrompt(params: {
   const validContextFiles = contextFiles.filter(
     (file) => typeof file.path === "string" && file.path.trim().length > 0,
   );
+  /** Extract lowercase basename from a file path, normalizing separators. */
+  const getBaseName = (filePath: string): string => {
+    const normalized = filePath.trim().replace(/\\/g, "/");
+    return (normalized.split("/").pop() ?? normalized).toLowerCase();
+  };
+  // Hoist bootstrap detection to function scope so the end-of-prompt reinforcement can reference it.
+  const hasBootstrapFile = validContextFiles.some(
+    (file) => getBaseName(file.path) === "bootstrap.md" && !file.content?.includes("[MISSING]"),
+  );
   if (validContextFiles.length > 0 || bootstrapTruncationWarningLines.length > 0) {
-    /** Extract lowercase basename from a file path, normalizing separators. */
-    const getBaseName = (filePath: string): string => {
-      const normalized = filePath.trim().replace(/\\/g, "/");
-      return (normalized.split("/").pop() ?? normalized).toLowerCase();
-    };
     const hasSoulFile = validContextFiles.some((file) => getBaseName(file.path) === "soul.md");
     const hasOperationsFile = validContextFiles.some(
       (file) => getBaseName(file.path) === "operations.md",
-    );
-    const hasBootstrapFile = validContextFiles.some(
-      (file) => getBaseName(file.path) === "bootstrap.md" && !file.content?.includes("[MISSING]"),
     );
     const hasHumanModeFiles = validContextFiles.some((file) => {
       const name = getBaseName(file.path);
@@ -757,7 +758,7 @@ export function buildAgentSystemPrompt(params: {
       if (params.businessModeEnabled || hasBusinessModeFiles) {
         // Business mode: SOUL.md contains the business guide (Operator OS™)
         lines.push(
-          "SOUL.md contains your Operator OS™ business partner persona. You are not an assistant — you are a strategic business partner with skin in the game. Internalize the Operator OS™ persona: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration. The RESTATEMENT RULE, minimal change default, and stewardship principles are embedded in your operating discipline.",
+          "SOUL.md contains your business partner operating principles. You are not an assistant — you are a strategic business partner with skin in the game. Internalize the frameworks: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration. Your identity comes from IDENTITY.md. The RESTATEMENT RULE, minimal change default, and stewardship principles are embedded in your operating discipline.",
         );
         lines.push(
           "",
@@ -795,7 +796,7 @@ export function buildAgentSystemPrompt(params: {
         "",
         "## Business Mode (Active)",
         "",
-        "openclaw-business-v1.md is loaded — you operate as a **business partner**, not an assistant. Internalize the Operator OS™ persona: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration.",
+        "openclaw-business-v1.md is loaded — you operate as a **business partner**, not an assistant. Internalize the business frameworks: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration. Your identity comes from IDENTITY.md.",
         "",
         "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
         "",
@@ -895,6 +896,16 @@ export function buildAgentSystemPrompt(params: {
       "HEARTBEAT_OK",
       'OpenClaw treats a leading/trailing "HEARTBEAT_OK" as a heartbeat ack (and may discard it).',
       'If something needs attention, do NOT include "HEARTBEAT_OK"; reply with the alert text instead.',
+      "",
+    );
+  }
+
+  // End-of-prompt bootstrap reinforcement — places the instruction in the recency zone
+  // that all models weight most heavily. Helps cheaper models that ignore the mid-prompt block.
+  if (hasBootstrapFile && !isMinimal) {
+    lines.push(
+      "## ⚠️ BOOTSTRAP OVERRIDE",
+      "BOOTSTRAP.md is present. Your VERY FIRST response MUST follow the bootstrap protocol. Do NOT respond casually. Do NOT greet the user normally. Start with the bootstrap introduction as described in BOOTSTRAP.md.",
       "",
     );
   }
