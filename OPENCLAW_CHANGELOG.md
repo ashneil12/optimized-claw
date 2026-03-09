@@ -5,6 +5,44 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Hermes-Inspired Features — Trajectory Compression, Session Search & Skill Auto-Creation (2026-03-09)
+
+**Purpose:** Implement three agent-improvement features inspired by the [Hermes Agent](https://github.com/NousResearch/hermes-agent): smarter context carryover via trajectory compression, exact keyword search for conversation history, and autonomous skill document management.
+
+### Code Changes (moltbotserver-source)
+
+| File                                                 | Change                                                                                                                                                                                                                      | Why                                                         |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `src/auto-reply/reply/trajectory-compressor.ts`      | **NEW** — `compressTrajectory` (async, with optional LLM callback) and `compressTrajectorySync` (mechanical). Protects first/last turns, compresses middle turns by extracting key decisions, tool usage, and user intents. | Richer session context summaries than the legacy extraction |
+| `src/auto-reply/reply/trajectory-compressor.test.ts` | **NEW** — 18 tests (parsing, compression, LLM callback, fallback, metrics)                                                                                                                                                  | Comprehensive coverage                                      |
+| `src/auto-reply/reply/session-context-summary.ts`    | Modified `persistSessionContextOnReset` to use `compressTrajectorySync`; added optional `summarize` callback for async LLM upgrade (fire-and-forget). Bumped error logs from `debug` → `warn`.                              | Trajectory compression integration + observability          |
+| `src/auto-reply/reply/session-search.ts`             | **NEW** — `SessionSearchIndex` class using SQLite FTS5 for exact keyword search of past conversations. LIKE-based fallback when FTS5 unavailable. `indexTranscriptForSearch` helper.                                        | Complements embedding-based memory search                   |
+| `src/auto-reply/reply/session-search.test.ts`        | **NEW** — 13 tests (indexing, search, filtering, phrases, limits)                                                                                                                                                           | Comprehensive coverage                                      |
+| `src/agents/tools/session-search-tool.ts`            | **NEW** — `createSessionSearchTool()` factory. Sub-agents restricted to searching their own sessions.                                                                                                                       | Agent-facing tool wrapper                                   |
+| `src/agents/tools/skill-manage-tool.ts`              | **NEW** — `createSkillManageTool()` with create/update/delete/list actions. Agent-created skills stored in `workspace/skills/`. 10KB size limit, name validation, human-authored protection.                                | Autonomous skill creation                                   |
+| `src/agents/tools/skill-manage-tool.test.ts`         | **NEW** — 15 tests (CRUD, validation, safety, edge cases)                                                                                                                                                                   | Comprehensive coverage                                      |
+| `src/agents/openclaw-tools.ts`                       | Registered `session_search` and `skill_manage` tools with agent ID resolution and sub-agent detection                                                                                                                       | Runtime tool wiring                                         |
+| `src/agents/tool-catalog.ts`                         | Added `session_search` (sessions section) and `skill_manage` (advanced section) entries                                                                                                                                     | Tool catalog registration                                   |
+| `src/agents/system-prompt.ts`                        | Added `session_search` and `skill_manage` to `coreToolSummaries` + `toolOrder`. Added "Skill Auto-Creation" guidance section (conditional on `skill_manage` availability).                                                  | Agent prompt guidance                                       |
+| `src/auto-reply/reply/session.ts`                    | Hooked `indexTranscriptForSearch` into session reset flow. Added `log.warn` on catch block for indexing failures.                                                                                                           | FTS5 indexing integration + observability                   |
+
+### Design Decisions
+
+- **Trajectory compression preserves boundaries** — first 3 and last 4 turns kept verbatim, middle compressed mechanically. Optional LLM upgrade runs fire-and-forget after immediate sync persist.
+- **FTS5 per-agent database** — stored at `workspace/memory/sessions.db`. Sub-agents search only their own sessions.
+- **Agent-created skills are local** — stored in `workspace/skills/` (not global skills dir) with `created_by: agent` frontmatter. Human-authored skills protected from modification.
+- **Error observability** — all background failure paths log at `warn` level, not `debug`. Features degrade gracefully but failures are visible.
+
+### Upstream Sync Risk
+
+**Low for `openclaw-tools.ts`** — two import + conditional push additions following existing patterns.
+**Low for `tool-catalog.ts`** — two array entries added to existing sections.
+**Low for `system-prompt.ts`** — two entries in `coreToolSummaries` + `toolOrder`, one conditional block after memory section.
+**Low for `session.ts`** — small addition after existing `persistSessionContextOnReset` call.
+**None for all other files** — fully custom new files.
+
+---
+
 ## Business Mode — Operator OS™ Integration (2026-03-09)
 
 **Purpose:** Add a toggleable "Business Mode" that transforms the agent into a strategic business partner using the Operator OS™ persona. When enabled, a 22KB guide and 64 organized knowledge documents are seeded into the workspace, the SOUL.md gets a business partner section, and the system prompt injects partner persona + knowledge base search guidance.
