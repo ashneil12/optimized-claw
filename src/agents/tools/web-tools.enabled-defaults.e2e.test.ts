@@ -68,17 +68,21 @@ function createKimiSearchTool(kimiConfig?: { apiKey?: string; baseUrl?: string; 
   });
 }
 
-function createProviderSearchTool(provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi") {
+function createProviderSearchTool(
+  provider: "tavily" | "brave" | "perplexity" | "grok" | "gemini" | "kimi",
+) {
   const searchConfig =
-    provider === "perplexity"
-      ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
-      : provider === "grok"
-        ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
-        : provider === "gemini"
-          ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
-          : provider === "kimi"
-            ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
-            : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
+    provider === "tavily"
+      ? { provider, tavily: { apiKey: "tvly-config-test" } } // pragma: allowlist secret
+      : provider === "perplexity"
+        ? { provider, perplexity: { apiKey: "pplx-config-test" } } // pragma: allowlist secret
+        : provider === "grok"
+          ? { provider, grok: { apiKey: "xai-config-test" } } // pragma: allowlist secret
+          : provider === "gemini"
+            ? { provider, gemini: { apiKey: "gemini-config-test" } } // pragma: allowlist secret
+            : provider === "kimi"
+              ? { provider, kimi: { apiKey: "moonshot-config-test" } } // pragma: allowlist secret
+              : { provider, apiKey: "brave-config-test" }; // pragma: allowlist secret
   return createWebSearchTool({
     config: {
       tools: {
@@ -121,8 +125,11 @@ function installPerplexityChatFetch() {
 }
 
 function createProviderSuccessPayload(
-  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi",
+  provider: "tavily" | "brave" | "perplexity" | "grok" | "gemini" | "kimi",
 ) {
+  if (provider === "tavily") {
+    return { results: [], answer: "ok" };
+  }
   if (provider === "brave") {
     return { web: { results: [] } };
   }
@@ -270,7 +277,7 @@ describe("web_search provider proxy dispatch", () => {
     global.fetch = priorFetch;
   });
 
-  it.each(["brave", "perplexity", "grok", "gemini", "kimi"] as const)(
+  it.each(["tavily", "brave", "perplexity", "grok", "gemini", "kimi"] as const)(
     "uses proxy-aware dispatcher for %s provider when HTTP_PROXY is configured",
     async (provider) => {
       vi.stubEnv("HTTP_PROXY", "http://127.0.0.1:7890");

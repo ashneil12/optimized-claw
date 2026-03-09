@@ -5,24 +5,70 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Business Mode — Operator OS™ Integration (2026-03-09)
+
+**Purpose:** Add a toggleable "Business Mode" that transforms the agent into a strategic business partner using the Operator OS™ persona. When enabled, a 22KB guide and 64 organized knowledge documents are seeded into the workspace, the SOUL.md gets a business partner section, and the system prompt injects partner persona + knowledge base search guidance.
+
+### Server Changes (moltbotserver-source)
+
+| File                                               | Change                                                                                                                                                                      | Why                                                                                                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/agents/workspace.ts`                          | Added `resolveBusinessModeEnabled()` — reads `OPENCLAW_BUSINESS_MODE` + `OPENCLAW_BUSINESS_MODE_ENABLED` env vars                                                           | Consistent with human mode dual-env-var pattern                                                                                           |
+| `src/agents/workspace.ts`                          | Refactored `removeHumanModeSectionFromSoul()`, `removeBusinessModeSectionFromSoul()`, `stripHonchoConditionals()` into generic `stripConditionalBlock()` helper (−80 lines) | Three identical 37-line functions with only marker strings different                                                                      |
+| `src/agents/workspace.ts`                          | Added `copyDirectoryRecursive()` with `writeFileIfMissing` semantics + `.DS_Store` filtering                                                                                | Seed template directories without overwriting user edits                                                                                  |
+| `src/agents/workspace.ts`                          | Business mode seeding block: seeds `openclaw-business-v1.md` + copies `business/` docs when enabled                                                                         | Knowledge base seeded on first enable                                                                                                     |
+| `src/agents/workspace.ts`                          | Business mode deletion block: removes `business/` folder + guide when `OPENCLAW_BUSINESS_DELETE_FILES=true` and mode disabled                                               | Two-step disable: user can optionally delete all files                                                                                    |
+| `src/agents/workspace.ts`                          | Added `DEFAULT_BUSINESS_GUIDE_FILENAME` to `VALID_BOOTSTRAP_NAMES`, `WorkspaceBootstrapFileName`, and `loadWorkspaceBootstrapFiles()` extra context array                   | Business guide loaded into agent context when file exists                                                                                 |
+| `src/agents/system-prompt.ts`                      | Added `hasBusinessModeFiles` detection + 12-line "Business Mode (Active)" context injection                                                                                 | System prompt tells agent it's in partner mode and how to search knowledge base                                                           |
+| `docs/reference/templates/SOUL.md`                 | Added `<!-- if-business-mode -->` conditional block with "Business Partner Mode" section                                                                                    | Agents get SOUL.md business section when enabled, stripped when disabled                                                                  |
+| `docs/reference/templates/openclaw-business-v1.md` | **NEW** — 22KB guide merging v3.7 base + v6 inquisitive-partner improvements + SOUL.md principles                                                                           | Core business partner persona: diagnostic gate, instruction challenge, opposing views, conviction calibration, knowledge base integration |
+| `docs/reference/templates/business/`               | **NEW** — 64 organized knowledge documents across 8 categories                                                                                                              | strategy/, content/, copywriting/, operations/, lead-generation/, books/, feedback/, database/                                            |
+
+### Dashboard Changes (moltbot-dashboard)
+
+| File                                                       | Change                                                                                                                                                          | Why                                                              |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `src/app/dashboard/instances/components/SettingsModal.tsx` | New "Business Mode" tab with `Briefcase` icon, amber toggle, two-step disable confirmation dialog with optional file deletion                                   | UI for enabling/disabling business mode with delete-files option |
+| `src/app/dashboard/instances/actions.ts`                   | `InstanceSettings` type + `updateInstanceSettings()` + `redeployInstance()` + `getInstanceSettings()` updated for `businessModeEnabled` + `businessDeleteFiles` | Full type chain and persistence pipeline                         |
+| `src/app/dashboard/instances/actions.ts`                   | `redeployInstance()` clears `businessDeleteFiles` from config after consumption (same pattern as `pendingApiKey`)                                               | Transient flag only fires once, not on subsequent restarts       |
+| `src/app/api/instances/[id]/settings/route.ts`             | GET returns `businessModeEnabled`; PATCH accepts via Zod schema; sets `OPENCLAW_BUSINESS_MODE_ENABLED` + `OPENCLAW_BUSINESS_DELETE_FILES` env vars              | API persistence for business mode toggle and file deletion flag  |
+| `src/lib/services/instance-env.ts`                         | Config type + `buildInstanceEnvVars()` emits `OPENCLAW_BUSINESS_MODE_ENABLED` and `OPENCLAW_BUSINESS_DELETE_FILES`                                              | Env var bridge between DB config and Docker container            |
+
+### Design Decisions
+
+- **Business mode defaults to OFF** — must be explicitly enabled (opposite of human mode which defaults on)
+- **File seeding uses `writeFileIfMissing`** — user modifications are never overwritten on restart
+- **Two-step disable:** (1) toggle off = exclude from context, (2) optional "also delete all business files" = `rm -rf business/` + guide
+- **`businessDeleteFiles` is transient** — consumed once on redeploy, then cleared from DB config
+- **Business mode supplements SOUL.md** — it adds partner mindset on top instead of replacing core principles
+- **Knowledge base via `memory_search`** — no special tooling needed, QMD indexes the `business/` folder automatically
+
+### Upstream Sync Risk
+
+**Low for `workspace.ts`** — business mode additions are in MoltBot-custom blocks. Generic `stripConditionalBlock()` refactor touches the existing honcho/human-mode strippers but is a clean consolidation.
+**Low for `system-prompt.ts`** — 12-line addition in existing `buildProjectContextSection` after the human mode block.
+**None for all other files** — `SOUL.md` and `openclaw-business-v1.md` are custom templates. Dashboard files are fully custom.
+
+---
+
 ## Browser Control Resilience — Parallel Profiles, Health Checks & Auto-Restart (2026-03-06)
 
 **Purpose:** Fix intermittent "Can't reach the OpenClaw browser control service (timed out after 3000ms)" errors caused by serial profile checking, tight client timeouts, and unhealthy Chrome containers that Docker never restarted.
 
 ### Code Changes (moltbotserver-source)
 
-| File | Change | Why |
-|------|--------|-----|
+| File                            | Change                                                        | Why                                                        |
+| ------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
 | `src/browser/server-context.ts` | `listProfiles()` serial `for` loop → `Promise.all` + `.map()` | 7 profiles × ~500ms serial = 3.5s; parallel = ~500ms total |
-| `src/browser/client.ts` | `browserProfiles` timeout `3000` → `5000` | Safety margin for parallel checks + network latency |
+| `src/browser/client.ts`         | `browserProfiles` timeout `3000` → `5000`                     | Safety margin for parallel checks + network latency        |
 
 ### Infrastructure Changes (moltbot-dashboard)
 
-| File | Change | Why |
-|------|--------|-----|
-| `hetzner-instance-service.ts` | Docker `healthcheck` (curl CDP every 30s, 3 retries) + `mem_limit: 512m` per browser container | Detect + prevent Chrome bloat |
-| `hetzner-instance-service.ts` | `browser-watchdog.sh` cron (every 5 min) | Auto-restart containers marked unhealthy |
-| `hetzner-instance-service.ts` | Fixed `pipefail`-incompatible `grep` for `OPENCLAW_SANDBOX_BROWSER_IMAGE` | `{ grep ... || true; }` pattern |
+| File                          | Change                                                                                         | Why                                      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------- | --- | ---------------- |
+| `hetzner-instance-service.ts` | Docker `healthcheck` (curl CDP every 30s, 3 retries) + `mem_limit: 512m` per browser container | Detect + prevent Chrome bloat            |
+| `hetzner-instance-service.ts` | `browser-watchdog.sh` cron (every 5 min)                                                       | Auto-restart containers marked unhealthy |
+| `hetzner-instance-service.ts` | Fixed `pipefail`-incompatible `grep` for `OPENCLAW_SANDBOX_BROWSER_IMAGE`                      | `{ grep ...                              |     | true; }` pattern |
 
 ### Upstream Sync Risk
 
