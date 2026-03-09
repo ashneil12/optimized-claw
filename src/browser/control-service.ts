@@ -4,8 +4,8 @@ import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig } from "./config.js";
 import { ensureBrowserControlAuth } from "./control-auth.js";
 import { setDownloadWorkspaceForCdp } from "./download-workspace-registry.js";
+import { createBrowserRuntimeState, stopBrowserRuntime } from "./runtime-lifecycle.js";
 import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
-import { ensureExtensionRelayForProfiles, stopKnownBrowserProfiles } from "./server-lifecycle.js";
 
 let state: BrowserServerState | null = null;
 const log = createSubsystemLogger("browser");
@@ -41,14 +41,9 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
     logService.warn(`failed to auto-configure browser auth: ${String(err)}`);
   }
 
-  state = {
+  state = await createBrowserRuntimeState({
     server: null,
     port: resolved.controlPort,
-    resolved,
-    profiles: new Map(),
-  };
-
-  await ensureExtensionRelayForProfiles({
     resolved,
     onWarn: (message) => logService.warn(message),
   });
@@ -86,9 +81,12 @@ export async function stopBrowserControlService(): Promise<void> {
   if (!current) {
     return;
   }
-
-  await stopKnownBrowserProfiles({
+  await stopBrowserRuntime({
+    current,
     getState: () => state,
+    clearState: () => {
+      state = null;
+    },
     onWarn: (message) => logService.warn(message),
   });
 

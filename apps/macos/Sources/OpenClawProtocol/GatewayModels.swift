@@ -836,6 +836,20 @@ public struct NodeRenameParams: Codable, Sendable {
 
 public struct NodeListParams: Codable, Sendable {}
 
+public struct NodePendingAckParams: Codable, Sendable {
+    public let ids: [String]
+
+    public init(
+        ids: [String])
+    {
+        self.ids = ids
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ids
+    }
+}
+
 public struct NodeDescribeParams: Codable, Sendable {
     public let nodeid: String
 
@@ -1740,18 +1754,10 @@ public struct TalkConfigParams: Codable, Sendable {
     public let includesecrets: Bool?
 
     public init(
-<<<<<<< HEAD
-        includesecrets: Bool?)
-    {
-        self.includesecrets = includesecrets
-    }
-
-=======
         includesecrets: Bool?
     ) {
         self.includesecrets = includesecrets
     }
->>>>>>> 292150259 (fix: commit missing refreshConfigFromDisk type for CI build)
     private enum CodingKeys: String, CodingKey {
         case includesecrets = "includeSecrets"
     }
@@ -1761,18 +1767,10 @@ public struct TalkConfigResult: Codable, Sendable {
     public let config: [String: AnyCodable]
 
     public init(
-<<<<<<< HEAD
-        config: [String: AnyCodable])
-    {
-        self.config = config
-    }
-
-=======
         config: [String: AnyCodable]
     ) {
         self.config = config
     }
->>>>>>> 292150259 (fix: commit missing refreshConfigFromDisk type for CI build)
     private enum CodingKeys: String, CodingKey {
         case config
     }
@@ -2988,13 +2986,8 @@ public struct ExecApprovalRequestParams: Codable, Sendable {
         turnsourceaccountid: AnyCodable?,
         turnsourcethreadid: AnyCodable?,
         timeoutms: Int?,
-<<<<<<< HEAD
-        twophase: Bool?)
-    {
-=======
         twophase: Bool?
     ) {
->>>>>>> 292150259 (fix: commit missing refreshConfigFromDisk type for CI build)
         self.id = id
         self.command = command
         self.commandargv = commandargv
@@ -3262,6 +3255,8 @@ public struct ChatSendParams: Codable, Sendable {
     public let deliver: Bool?
     public let attachments: [AnyCodable]?
     public let timeoutms: Int?
+    public let systeminputprovenance: [String: AnyCodable]?
+    public let systemprovenancereceipt: String?
     public let idempotencykey: String
 
     public init(
@@ -3271,6 +3266,8 @@ public struct ChatSendParams: Codable, Sendable {
         deliver: Bool?,
         attachments: [AnyCodable]?,
         timeoutms: Int?,
+        systeminputprovenance: [String: AnyCodable]?,
+        systemprovenancereceipt: String?,
         idempotencykey: String)
     {
         self.sessionkey = sessionkey
@@ -3279,6 +3276,8 @@ public struct ChatSendParams: Codable, Sendable {
         self.deliver = deliver
         self.attachments = attachments
         self.timeoutms = timeoutms
+        self.systeminputprovenance = systeminputprovenance
+        self.systemprovenancereceipt = systemprovenancereceipt
         self.idempotencykey = idempotencykey
     }
 
@@ -3289,6 +3288,8 @@ public struct ChatSendParams: Codable, Sendable {
         case deliver
         case attachments
         case timeoutms = "timeoutMs"
+        case systeminputprovenance = "systemInputProvenance"
+        case systemprovenancereceipt = "systemProvenanceReceipt"
         case idempotencykey = "idempotencyKey"
     }
 }

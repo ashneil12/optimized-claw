@@ -10,14 +10,23 @@ import { chromium } from "playwright-core";
 import { formatErrorMessage } from "../infra/errors.js";
 import type { SsrFPolicy } from "../infra/net/ssrf.js";
 import { withNoProxyForCdpUrl } from "./cdp-proxy-bypass.js";
-import { appendCdpPath, fetchJson, getHeadersWithAuth, withCdpSocket } from "./cdp.helpers.js";
+import {
+  appendCdpPath,
+  fetchJson,
+  getHeadersWithAuth,
+  normalizeCdpHttpBaseForJsonEndpoints,
+  withCdpSocket,
+} from "./cdp.helpers.js";
 import { normalizeCdpWsUrl } from "./cdp.js";
 import { getChromeWebSocketUrl } from "./chrome.js";
+import { BrowserTabNotFoundError } from "./errors.js";
 import {
   assertBrowserNavigationAllowed,
+  assertBrowserNavigationRedirectChainAllowed,
   assertBrowserNavigationResultAllowed,
   withBrowserNavigationPolicy,
 } from "./navigation-guard.js";
+import { isExtensionRelayCdpEndpoint, withPageScopedCdpClient } from "./pw-session.page-cdp.js";
 import { getStealthScript } from "./stealth-scripts.js";
 
 export type BrowserConsoleMessage = {
@@ -111,8 +120,8 @@ const MAX_NETWORK_REQUESTS = 500;
 // Per-profile connection cache keyed by normalized cdpUrl.
 // Using a Map ensures each remote profile maintains its own persistent
 // Playwright connection without evicting other profiles' connections.
-const connectionCache = new Map<string, ConnectedBrowser>();
-const connectingMap = new Map<string, Promise<ConnectedBrowser>>();
+const cachedByCdpUrl = new Map<string, ConnectedBrowser>();
+const connectingByCdpUrl = new Map<string, Promise<ConnectedBrowser>>();
 
 function normalizeCdpUrl(raw: string) {
   return raw.replace(/\/$/, "");
@@ -329,13 +338,13 @@ function observeBrowser(browser: Browser) {
 
 async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
   const normalized = normalizeCdpUrl(cdpUrl);
-  const existing = connectionCache.get(normalized);
-  if (existing) {
-    return existing;
+  const cached = cachedByCdpUrl.get(normalized);
+  if (cached) {
+    return cached;
   }
-  const inFlight = connectingMap.get(normalized);
-  if (inFlight) {
-    return await inFlight;
+  const connecting = connectingByCdpUrl.get(normalized);
+  if (connecting) {
+    return await connecting;
   }
 
   const connectWithRetry = async (): Promise<ConnectedBrowser> => {
@@ -351,13 +360,13 @@ async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
           chromium.connectOverCDP(endpoint, { timeout, headers }),
         );
         const onDisconnected = () => {
-          // Only evict if this browser is still the cached one for this URL
-          if (connectionCache.get(normalized)?.browser === browser) {
-            connectionCache.delete(normalized);
+          const current = cachedByCdpUrl.get(normalized);
+          if (current?.browser === browser) {
+            cachedByCdpUrl.delete(normalized);
           }
         };
         const connected: ConnectedBrowser = { browser, cdpUrl: normalized, onDisconnected };
-        connectionCache.set(normalized, connected);
+        cachedByCdpUrl.set(normalized, connected);
         browser.on("disconnected", onDisconnected);
         observeBrowser(browser);
         return connected;
@@ -374,12 +383,12 @@ async function connectBrowser(cdpUrl: string): Promise<ConnectedBrowser> {
     throw new Error(message);
   };
 
-  const promise = connectWithRetry().finally(() => {
-    connectingMap.delete(normalized);
+  const pending = connectWithRetry().finally(() => {
+    connectingByCdpUrl.delete(normalized);
   });
-  connectingMap.set(normalized, promise);
+  connectingByCdpUrl.set(normalized, pending);
 
-  return await promise;
+  return await pending;
 }
 
 async function getAllPages(browser: Browser): Promise<Page[]> {
@@ -399,14 +408,70 @@ async function pageTargetId(page: Page): Promise<string | null> {
   }
 }
 
+function matchPageByTargetList(
+  pages: Page[],
+  targets: Array<{ id: string; url: string; title?: string }>,
+  targetId: string,
+): Page | null {
+  const target = targets.find((entry) => entry.id === targetId);
+  if (!target) {
+    return null;
+  }
+
+  const urlMatch = pages.filter((page) => page.url() === target.url);
+  if (urlMatch.length === 1) {
+    return urlMatch[0] ?? null;
+  }
+  if (urlMatch.length > 1) {
+    const sameUrlTargets = targets.filter((entry) => entry.url === target.url);
+    if (sameUrlTargets.length === urlMatch.length) {
+      const idx = sameUrlTargets.findIndex((entry) => entry.id === targetId);
+      if (idx >= 0 && idx < urlMatch.length) {
+        return urlMatch[idx] ?? null;
+      }
+    }
+  }
+  return null;
+}
+
+async function findPageByTargetIdViaTargetList(
+  pages: Page[],
+  targetId: string,
+  cdpUrl: string,
+): Promise<Page | null> {
+  const cdpHttpBase = normalizeCdpHttpBaseForJsonEndpoints(cdpUrl);
+  const targets = await fetchJson<
+    Array<{
+      id: string;
+      url: string;
+      title?: string;
+    }>
+  >(appendCdpPath(cdpHttpBase, "/json/list"), 2000);
+  return matchPageByTargetList(pages, targets, targetId);
+}
+
 async function findPageByTargetId(
   browser: Browser,
   targetId: string,
   cdpUrl?: string,
 ): Promise<Page | null> {
   const pages = await getAllPages(browser);
+  const isExtensionRelay = cdpUrl
+    ? await isExtensionRelayCdpEndpoint(cdpUrl).catch(() => false)
+    : false;
+  if (cdpUrl && isExtensionRelay) {
+    try {
+      const matched = await findPageByTargetIdViaTargetList(pages, targetId, cdpUrl);
+      if (matched) {
+        return matched;
+      }
+    } catch {
+      // Ignore fetch errors and fall through to best-effort single-page fallback.
+    }
+    return pages.length === 1 ? (pages[0] ?? null) : null;
+  }
+
   let resolvedViaCdp = false;
-  // First, try the standard CDP session approach
   for (const page of pages) {
     let tid: string | null = null;
     try {
@@ -419,51 +484,17 @@ async function findPageByTargetId(
       return page;
     }
   }
-  // Extension relays can block CDP attachment APIs entirely. If that happens and
-  // Playwright only exposes one page, return it as the best available mapping.
-  if (!resolvedViaCdp && pages.length === 1) {
-    return pages[0];
-  }
-  // If CDP sessions fail (e.g., extension relay blocks Target.attachToBrowserTarget),
-  // fall back to URL-based matching using the /json/list endpoint
   if (cdpUrl) {
     try {
-      const baseUrl = cdpUrl
-        .replace(/\/+$/, "")
-        .replace(/^ws:/, "http:")
-        .replace(/\/cdp$/, "");
-      const listUrl = `${baseUrl}/json/list`;
-      // Use fetchJson (from cdp.helpers) instead of raw fetch() so the
-      // Host header override works for Docker hostnames.
-      const targets = await fetchJson<
-        Array<{
-          id: string;
-          url: string;
-          title?: string;
-        }>
-      >(listUrl, 3000);
-      const target = targets.find((t) => t.id === targetId);
-      if (target) {
-        // Try to find a page with matching URL
-        const urlMatch = pages.filter((p) => p.url() === target.url);
-        if (urlMatch.length === 1) {
-          return urlMatch[0];
-        }
-        // If multiple URL matches, use index-based matching as fallback
-        // This works when Playwright and the relay enumerate tabs in the same order
-        if (urlMatch.length > 1) {
-          const sameUrlTargets = targets.filter((t) => t.url === target.url);
-          if (sameUrlTargets.length === urlMatch.length) {
-            const idx = sameUrlTargets.findIndex((t) => t.id === targetId);
-            if (idx >= 0 && idx < urlMatch.length) {
-              return urlMatch[idx];
-            }
-          }
-        }
-      }
+      // Use findPageByTargetIdViaTargetList which internally uses fetchJson
+      // (from cdp.helpers) so the Host header override works for Docker hostnames.
+      return await findPageByTargetIdViaTargetList(pages, targetId, cdpUrl);
     } catch {
-      // Ignore fetch errors and fall through to return null
+      // Ignore fetch errors and fall through to return null.
     }
+  }
+  if (!resolvedViaCdp && pages.length === 1) {
+    return pages[0] ?? null;
   }
   return null;
 }
@@ -475,7 +506,7 @@ async function resolvePageByTargetIdOrThrow(opts: {
   const { browser } = await connectBrowser(opts.cdpUrl);
   const page = await findPageByTargetId(browser, opts.targetId, opts.cdpUrl);
   if (!page) {
-    throw new Error("tab not found");
+    throw new BrowserTabNotFoundError();
   }
   return page;
 }
@@ -501,7 +532,7 @@ export async function getPageForTargetId(opts: {
     if (pages.length === 1) {
       return first;
     }
-    throw new Error("tab not found");
+    throw new BrowserTabNotFoundError();
   }
   return found;
 }
@@ -545,13 +576,13 @@ export function refLocator(page: Page, ref: string) {
   return page.locator(`aria-ref=${normalized}`);
 }
 
-export async function closePlaywrightBrowserConnection(cdpUrl?: string): Promise<void> {
-  if (cdpUrl) {
-    // Close connection for a specific profile
-    const normalized = normalizeCdpUrl(cdpUrl);
-    const cur = connectionCache.get(normalized);
-    connectionCache.delete(normalized);
-    connectingMap.delete(normalized);
+export async function closePlaywrightBrowserConnection(opts?: { cdpUrl?: string }): Promise<void> {
+  const normalized = opts?.cdpUrl ? normalizeCdpUrl(opts.cdpUrl) : null;
+
+  if (normalized) {
+    const cur = cachedByCdpUrl.get(normalized);
+    cachedByCdpUrl.delete(normalized);
+    connectingByCdpUrl.delete(normalized);
     if (!cur) {
       return;
     }
@@ -561,37 +592,16 @@ export async function closePlaywrightBrowserConnection(cdpUrl?: string): Promise
     await cur.browser.close().catch(() => {});
     return;
   }
-  // Close all connections (shutdown)
-  const entries = [...connectionCache.entries()];
-  connectionCache.clear();
-  connectingMap.clear();
-  for (const [, cur] of entries) {
+
+
+  const connections = Array.from(cachedByCdpUrl.values());
+  cachedByCdpUrl.clear();
+  connectingByCdpUrl.clear();
+  for (const cur of connections) {
     if (cur.onDisconnected && typeof cur.browser.off === "function") {
       cur.browser.off("disconnected", cur.onDisconnected);
     }
     await cur.browser.close().catch(() => {});
-  }
-}
-
-function normalizeCdpHttpBaseForJsonEndpoints(cdpUrl: string): string {
-  try {
-    const url = new URL(cdpUrl);
-    if (url.protocol === "ws:") {
-      url.protocol = "http:";
-    } else if (url.protocol === "wss:") {
-      url.protocol = "https:";
-    }
-    url.pathname = url.pathname.replace(/\/devtools\/browser\/.*$/, "");
-    url.pathname = url.pathname.replace(/\/cdp$/, "");
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    // Best-effort fallback for non-URL-ish inputs.
-    return cdpUrl
-      .replace(/^ws:/, "http:")
-      .replace(/^wss:/, "https:")
-      .replace(/\/devtools\/browser\/.*$/, "")
-      .replace(/\/cdp$/, "")
-      .replace(/\/$/, "");
   }
 }
 
@@ -698,16 +708,16 @@ export async function forceDisconnectPlaywrightForTarget(opts: {
   reason?: string;
 }): Promise<void> {
   const normalized = normalizeCdpUrl(opts.cdpUrl);
-  const cur = connectionCache.get(normalized);
+  const cur = cachedByCdpUrl.get(normalized);
   if (!cur) {
     return;
   }
-  // Remove from cache and clear any in-flight promise for this URL
-  connectionCache.delete(normalized);
-  connectingMap.delete(normalized);
-
+  cachedByCdpUrl.delete(normalized);
+  // Also clear the per-url in-flight connect so the next call does a fresh connectOverCDP
+  // rather than awaiting a stale promise.
+  connectingByCdpUrl.delete(normalized);
   // Remove the "disconnected" listener to prevent the old browser's teardown
-  // from racing with a fresh connection and evicting the new cache entry.
+  // from racing with a fresh connection and nulling the new cached entry.
   if (cur.onDisconnected && typeof cur.browser.off === "function") {
     cur.browser.off("disconnected", cur.onDisconnected);
   }
@@ -788,8 +798,13 @@ export async function createPageViaPlaywright(opts: {
       url: targetUrl,
       ...navigationPolicy,
     });
-    await page.goto(targetUrl, { timeout: 30_000 }).catch(() => {
+    const response = await page.goto(targetUrl, { timeout: 30_000 }).catch(() => {
       // Navigation might fail for some URLs, but page is still created
+      return null;
+    });
+    await assertBrowserNavigationRedirectChainAllowed({
+      request: response?.request(),
+      ...navigationPolicy,
     });
     await assertBrowserNavigationResultAllowed({
       url: page.url(),
@@ -835,14 +850,18 @@ export async function focusPageByTargetIdViaPlaywright(opts: {
   try {
     await page.bringToFront();
   } catch (err) {
-    const session = await page.context().newCDPSession(page);
     try {
-      await session.send("Page.bringToFront");
+      await withPageScopedCdpClient({
+        cdpUrl: opts.cdpUrl,
+        page,
+        targetId: opts.targetId,
+        fn: async (send) => {
+          await send("Page.bringToFront");
+        },
+      });
       return;
     } catch {
       throw err;
-    } finally {
-      await session.detach().catch(() => {});
     }
   }
 }

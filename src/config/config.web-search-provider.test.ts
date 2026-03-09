@@ -51,30 +51,6 @@ describe("web search provider config", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("accepts tavily provider and config", () => {
-    const res = validateConfigObject(
-      buildWebSearchProviderConfig({
-        enabled: true,
-        provider: "tavily",
-        providerConfig: {
-          apiKey: "tvly-test-key", // pragma: allowlist secret
-        },
-      }),
-    );
-
-    expect(res.ok).toBe(true);
-  });
-
-  it("accepts tavily provider with no extra config", () => {
-    const res = validateConfigObject(
-      buildWebSearchProviderConfig({
-        provider: "tavily",
-      }),
-    );
-
-    expect(res.ok).toBe(true);
-  });
-
   it("accepts brave llm-context mode config", () => {
     const res = validateConfigObject(
       buildWebSearchProviderConfig({
@@ -113,7 +89,8 @@ describe("web search provider auto-detection", () => {
     delete process.env.PERPLEXITY_API_KEY;
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.XAI_API_KEY;
-    delete process.env.TAVILY_API_KEY;
+    delete process.env.KIMI_API_KEY;
+    delete process.env.MOONSHOT_API_KEY;
   });
 
   afterEach(() => {
@@ -121,13 +98,8 @@ describe("web search provider auto-detection", () => {
     vi.restoreAllMocks();
   });
 
-  it("falls back to tavily when no keys available", () => {
-    expect(resolveSearchProvider({})).toBe("tavily");
-  });
-
-  it("auto-detects tavily when only TAVILY_API_KEY is set", () => {
-    process.env.TAVILY_API_KEY = "tvly-test-key"; // pragma: allowlist secret
-    expect(resolveSearchProvider({})).toBe("tavily");
+  it("falls back to brave when no keys available", () => {
+    expect(resolveSearchProvider({})).toBe("brave");
   });
 
   it("auto-detects brave when only BRAVE_API_KEY is set", () => {
@@ -170,16 +142,7 @@ describe("web search provider auto-detection", () => {
     expect(resolveSearchProvider({})).toBe("kimi");
   });
 
-  it("follows priority order — tavily wins when multiple keys available", () => {
-    process.env.TAVILY_API_KEY = "tvly-test-key"; // pragma: allowlist secret
-    process.env.BRAVE_API_KEY = "test-brave-key"; // pragma: allowlist secret
-    process.env.GEMINI_API_KEY = "test-gemini-key"; // pragma: allowlist secret
-    process.env.PERPLEXITY_API_KEY = "test-perplexity-key"; // pragma: allowlist secret
-    process.env.XAI_API_KEY = "test-xai-key"; // pragma: allowlist secret
-    expect(resolveSearchProvider({})).toBe("tavily");
-  });
-
-  it("brave wins when tavily unavailable and multiple other keys available", () => {
+  it("follows alphabetical order — brave wins when multiple keys available", () => {
     process.env.BRAVE_API_KEY = "test-brave-key"; // pragma: allowlist secret
     process.env.GEMINI_API_KEY = "test-gemini-key"; // pragma: allowlist secret
     process.env.PERPLEXITY_API_KEY = "test-perplexity-key"; // pragma: allowlist secret
@@ -187,18 +150,18 @@ describe("web search provider auto-detection", () => {
     expect(resolveSearchProvider({})).toBe("brave");
   });
 
-  it("gemini wins over perplexity and grok when brave and tavily unavailable", () => {
+  it("gemini wins over grok, kimi, and perplexity when brave unavailable", () => {
     process.env.GEMINI_API_KEY = "test-gemini-key"; // pragma: allowlist secret
     process.env.PERPLEXITY_API_KEY = "test-perplexity-key"; // pragma: allowlist secret
     process.env.XAI_API_KEY = "test-xai-key"; // pragma: allowlist secret
     expect(resolveSearchProvider({})).toBe("gemini");
   });
 
-  it("brave wins over gemini and grok when tavily and perplexity unavailable", () => {
-    process.env.BRAVE_API_KEY = "test-brave-key"; // pragma: allowlist secret
-    process.env.GEMINI_API_KEY = "test-gemini-key"; // pragma: allowlist secret
+  it("grok wins over kimi and perplexity when brave and gemini unavailable", () => {
     process.env.XAI_API_KEY = "test-xai-key"; // pragma: allowlist secret
-    expect(resolveSearchProvider({})).toBe("brave");
+    process.env.KIMI_API_KEY = "test-kimi-key"; // pragma: allowlist secret
+    process.env.PERPLEXITY_API_KEY = "test-perplexity-key"; // pragma: allowlist secret
+    expect(resolveSearchProvider({})).toBe("grok");
   });
 
   it("explicit provider always wins regardless of keys", () => {
