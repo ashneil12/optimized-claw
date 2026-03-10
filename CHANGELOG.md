@@ -6,11 +6,14 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
-### Breaking
+- Memory/Workspace indexing: automatically register the entire workspace root as a QMD `workspace` collection (`workspace-<agentId>`, pattern `**/*.md`) whenever the QMD backend is active, so all workspace documents (business/, docs/, notes/, etc.) are searchable without manual configuration. Add `memory.qmd.workspacePaths` config for additional indexed directories. (local fork)
+- Memory/`workspace_search` tool: add a new `workspace_search` tool that searches only workspace-kind QMD collections, distinct from `memory_search` (personal memory). Available when `OPENCLAW_BUSINESS_MODE_ENABLED=true` (or `OPENCLAW_BUSINESS_MODE=1`) and QMD backend is active. (local fork)
+- Agents/business mode dual search: update system prompt to mandate both `memory_search` AND `workspace_search` before every response in business mode, and describe the tool split in the Memory Recall section when `workspace_search` is available. (local fork)
 
 ### Fixes
 
 - macOS/LaunchAgent install: tighten LaunchAgent directory and plist permissions during install so launchd bootstrap does not fail when the target home path or generated plist inherited group/world-writable modes.
+- Docker/qmd install: broaden the `find` path for `qmd.ts` after bun global install to search `/` (excluding /proc, /sys) instead of hardcoded bun paths that break on bun version changes. (local fork)
 
 ## 2026.3.8
 
