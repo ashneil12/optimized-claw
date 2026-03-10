@@ -143,4 +143,64 @@ describe("resolveMemoryBackendConfig", () => {
     const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
     expect(resolved.qmd?.searchMode).toBe("vsearch");
   });
+
+  it("always includes a workspace collection when qmd backend is active", () => {
+    const cfg = {
+      agents: { defaults: { workspace: "/tmp/memory-test" } },
+      memory: {
+        backend: "qmd",
+        qmd: {},
+      },
+    } as OpenClawConfig;
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
+    const workspaceCollection = (resolved.qmd?.collections ?? []).find(
+      (c) => c.kind === "workspace",
+    );
+    expect(workspaceCollection).toBeDefined();
+    expect(workspaceCollection?.name).toBe("workspace-main");
+    expect(workspaceCollection?.pattern).toBe("**/*.md");
+  });
+
+  it("resolves user-provided workspacePaths as workspace-kind collections", () => {
+    const cfg = {
+      agents: {
+        defaults: { workspace: "/workspace/root" },
+        list: [{ id: "main", workspace: "/workspace/root" }],
+      },
+      memory: {
+        backend: "qmd",
+        qmd: {
+          workspacePaths: [{ path: "extra-docs", name: "extra-docs", pattern: "**/*.md" }],
+        },
+      },
+    } as OpenClawConfig;
+    const resolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
+    const extra = (resolved.qmd?.collections ?? []).find((c) => c.name.startsWith("extra-docs"));
+    expect(extra).toBeDefined();
+    expect(extra?.kind).toBe("workspace");
+    const workspaceRoot = path.resolve("/workspace/root", "extra-docs");
+    expect(extra?.path).toBe(workspaceRoot);
+  });
+
+  it("scopes workspace collection names per agent", () => {
+    const cfg = {
+      agents: {
+        defaults: { workspace: "/workspace/root" },
+        list: [
+          { id: "main", default: true, workspace: "/workspace/root" },
+          { id: "dev", workspace: "/workspace/dev" },
+        ],
+      },
+      memory: {
+        backend: "qmd",
+        qmd: {},
+      },
+    } as OpenClawConfig;
+    const mainResolved = resolveMemoryBackendConfig({ cfg, agentId: "main" });
+    const devResolved = resolveMemoryBackendConfig({ cfg, agentId: "dev" });
+    const mainWorkspace = (mainResolved.qmd?.collections ?? []).find((c) => c.kind === "workspace");
+    const devWorkspace = (devResolved.qmd?.collections ?? []).find((c) => c.kind === "workspace");
+    expect(mainWorkspace?.name).toBe("workspace-main");
+    expect(devWorkspace?.name).toBe("workspace-dev");
+  });
 });

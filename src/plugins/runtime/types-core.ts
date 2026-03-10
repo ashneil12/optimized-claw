@@ -36,6 +36,7 @@ export type PluginRuntimeCore = {
   tools: {
     createMemoryGetTool: typeof import("../../agents/tools/memory-tool.js").createMemoryGetTool;
     createMemorySearchTool: typeof import("../../agents/tools/memory-tool.js").createMemorySearchTool;
+    createWorkspaceSearchTool: typeof import("../../agents/tools/workspace-search-tool.js").createWorkspaceSearchTool;
     registerMemoryCli: typeof import("../../cli/memory-cli.js").registerMemoryCli;
   };
   events: {

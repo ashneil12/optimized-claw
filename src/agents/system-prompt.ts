@@ -48,10 +48,18 @@ function buildMemorySection(params: {
   if (!params.availableTools.has("memory_search") && !params.availableTools.has("memory_get")) {
     return [];
   }
+  const hasWorkspaceSearch = params.availableTools.has("workspace_search");
   const lines = [
     "## Memory Recall",
-    "Before answering any non-trivial question — anything involving project details, configurations, architecture, past decisions, names, processes, technical specifics, preferences, dates, or prior work — run memory_search with a few keywords from the request to check MEMORY.md + memory/*.md for relevant context; then use memory_get to pull only the needed lines. Skip this for simple greetings, casual conversation, general knowledge, or when the answer is already visible in your loaded context above. If low confidence after search, say you checked.",
+    "Before answering any non-trivial question — anything involving project details, configurations, architecture, past decisions, names, processes, technical specifics, preferences, dates, prior work, or any topic where workspace context might exist — run memory_search with a few keywords from the request. This searches MEMORY.md, memory/*.md, and any workspace knowledge files (e.g. business/, memory/knowledge/). Then use memory_get to pull only the needed lines. Skip this for simple greetings, casual conversation, pure general knowledge with no workspace angle, or when the answer is already visible in your loaded context above. If low confidence after search, say you checked.",
   ];
+  if (hasWorkspaceSearch) {
+    lines.push(
+      "workspace_search is also available: it searches business docs, project notes, and all other documents indexed from the workspace (business/, docs/, notes/, etc.). " +
+        "Run workspace_search for questions about business strategy, playbooks, frameworks, or project-specific knowledge. " +
+        "The two tools are complementary — memory_search covers your personal memory layer; workspace_search covers workspace documents.",
+    );
+  }
   if (params.citationsMode === "off") {
     lines.push(
       "Citations are disabled: do not mention file paths or line numbers in replies unless the user explicitly asks.",
@@ -762,7 +770,7 @@ export function buildAgentSystemPrompt(params: {
         );
         lines.push(
           "",
-          "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
+          "**Knowledge Base (MANDATORY):** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. **Before responding to ANY question — simple or complex — you MUST run BOTH `memory_search` AND `workspace_search` with 2–3 keywords from the user's question. `memory_search` covers your personal memory layer; `workspace_search` searches the indexed workspace documents including all business/ files. This dual search is not optional. Do not skip either step.** Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
         );
       } else {
         lines.push(
@@ -798,7 +806,7 @@ export function buildAgentSystemPrompt(params: {
         "",
         "openclaw-business-v1.md is loaded — you operate as a **business partner**, not an assistant. Internalize the business frameworks: strategic brain engine, business partner standard, instruction challenge protocol, opposing views protocol, and conviction calibration. Your identity comes from IDENTITY.md.",
         "",
-        "**Knowledge Base:** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. Use `memory_search` with relevant keywords to query this knowledge base before complex business analysis. Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
+        "**Knowledge Base (MANDATORY):** Your workspace contains a `business/` folder with organized strategy, content, copywriting, operations, lead-generation, books, and feedback documents. **Before responding to ANY question — simple or complex — you MUST run BOTH `memory_search` AND `workspace_search` with 2–3 keywords from the user's question. `memory_search` covers your personal memory layer; `workspace_search` searches the indexed workspace documents including all business/ files. This dual search is not optional. Do not skip either step.** Search broadly when uncertain — the knowledge base contains frameworks, playbooks, and reference material.",
         "",
       );
     }

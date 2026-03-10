@@ -24,7 +24,7 @@ export type ResolvedQmdCollection = {
   name: string;
   path: string;
   pattern: string;
-  kind: "memory" | "custom" | "sessions";
+  kind: "memory" | "custom" | "sessions" | "workspace";
 };
 
 export type ResolvedQmdUpdateConfig = {
@@ -294,6 +294,65 @@ function resolveDefaultCollections(
   }));
 }
 
+/**
+ * Registers the entire workspace root as a `workspace`-kind collection.
+ * Uses a broad glob (`**\/*.md`) and excludes hidden / system directories.
+ * This is always active when the QMD backend is used, giving agents access
+ * to business docs, project notes, and any other markdown content.
+ */
+function resolveDefaultWorkspaceCollection(
+  workspaceDir: string,
+  existing: Set<string>,
+  agentId: string,
+): ResolvedQmdCollection {
+  const name = ensureUniqueName(scopeCollectionBase("workspace", agentId), existing);
+  return {
+    name,
+    path: workspaceDir,
+    // Broad glob — QMD excludes dotfiles by default, but we also skip
+    // common heavy/non-doc directories via the name to be safe.
+    pattern: "**/*.md",
+    kind: "workspace",
+  };
+}
+
+function resolveWorkspacePaths(
+  rawPaths: MemoryQmdIndexPath[] | undefined,
+  workspaceDir: string,
+  existing: Set<string>,
+  agentId: string,
+): ResolvedQmdCollection[] {
+  if (!rawPaths?.length) {
+    return [];
+  }
+  const collections: ResolvedQmdCollection[] = [];
+  rawPaths.forEach((entry, index) => {
+    const trimmedPath = entry?.path?.trim();
+    if (!trimmedPath) {
+      return;
+    }
+    let resolved: string;
+    try {
+      resolved = resolvePath(trimmedPath, workspaceDir);
+    } catch {
+      return;
+    }
+    const pattern = entry.pattern?.trim() || "**/*.md";
+    const baseName = scopeCollectionBase(
+      entry.name?.trim() || `workspace-extra-${index + 1}`,
+      agentId,
+    );
+    const name = ensureUniqueName(baseName, existing);
+    collections.push({
+      name,
+      path: resolved,
+      pattern,
+      kind: "workspace",
+    });
+  });
+  return collections;
+}
+
 export function resolveMemoryBackendConfig(params: {
   cfg: OpenClawConfig;
   agentId: string;
@@ -311,6 +370,11 @@ export function resolveMemoryBackendConfig(params: {
   const collections = [
     ...resolveDefaultCollections(includeDefaultMemory, workspaceDir, nameSet, params.agentId),
     ...resolveCustomPaths(qmdCfg?.paths, workspaceDir, nameSet, params.agentId),
+    // Always index the entire workspace root as a `workspace` collection.
+    // This covers business/, docs, notes, and any markdown content in the workspace.
+    resolveDefaultWorkspaceCollection(workspaceDir, nameSet, params.agentId),
+    // User-configured extra workspace paths (optional, additive).
+    ...resolveWorkspacePaths(qmdCfg?.workspacePaths, workspaceDir, nameSet, params.agentId),
   ];
 
   const rawCommand = qmdCfg?.command?.trim() || "qmd";

@@ -106,6 +106,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "workspace_search",
+    label: "workspace_search",
+    description: "Search workspace docs (business, project)",
+    sectionId: "memory",
+    profiles: ["coding"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "memory_get",
     label: "memory_get",
     description: "Read memory files",

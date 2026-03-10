@@ -1215,7 +1215,10 @@ export abstract class MemoryManagerSyncOps {
 
   private resolveConfiguredSourcesForMeta(): MemorySource[] {
     const normalized = Array.from(this.sources)
-      .filter((source): source is MemorySource => source === "memory" || source === "sessions")
+      .filter(
+        (source): source is MemorySource =>
+          source === "memory" || source === "sessions" || source === "workspace",
+      )
       .toSorted();
     return normalized.length > 0 ? normalized : ["memory"];
   }
@@ -1228,7 +1231,8 @@ export abstract class MemoryManagerSyncOps {
     const normalized = Array.from(
       new Set(
         meta.sources.filter(
-          (source): source is MemorySource => source === "memory" || source === "sessions",
+          (source): source is MemorySource =>
+            source === "memory" || source === "sessions" || source === "workspace",
         ),
       ),
     ).toSorted();

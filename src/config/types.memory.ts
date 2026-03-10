@@ -16,6 +16,9 @@ export type MemoryQmdConfig = {
   searchMode?: MemoryQmdSearchMode;
   includeDefaultMemory?: boolean;
   paths?: MemoryQmdIndexPath[];
+  /** Additional workspace directories to index (kind=workspace). The default workspace root
+   *  is always indexed automatically; use this for repos or dirs outside the workspace root. */
+  workspacePaths?: MemoryQmdIndexPath[];
   sessions?: MemoryQmdSessionConfig;
   update?: MemoryQmdUpdateConfig;
   limits?: MemoryQmdLimitsConfig;

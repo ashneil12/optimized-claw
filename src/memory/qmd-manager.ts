@@ -119,7 +119,7 @@ type ManagedCollection = {
   name: string;
   path: string;
   pattern: string;
-  kind: "memory" | "custom" | "sessions";
+  kind: "memory" | "custom" | "sessions" | "workspace";
 };
 
 type QmdManagerMode = "full" | "status";
@@ -281,7 +281,12 @@ export class QmdMemoryManager implements MemorySearchManager {
     this.collectionRoots.clear();
     this.sources.clear();
     for (const collection of this.qmd.collections) {
-      const kind: MemorySource = collection.kind === "sessions" ? "sessions" : "memory";
+      const kind: MemorySource =
+        collection.kind === "sessions"
+          ? "sessions"
+          : collection.kind === "workspace"
+            ? "workspace"
+            : "memory";
       this.collectionRoots.set(collection.name, { path: collection.path, kind });
       this.sources.add(kind);
     }
@@ -485,7 +490,7 @@ export class QmdMemoryManager implements MemorySearchManager {
   private async ensureCollectionPath(collection: {
     path: string;
     pattern: string;
-    kind: "memory" | "custom" | "sessions";
+    kind: "memory" | "custom" | "sessions" | "workspace";
   }): Promise<void> {
     if (!this.isDirectoryGlobPattern(collection.pattern)) {
       return;
