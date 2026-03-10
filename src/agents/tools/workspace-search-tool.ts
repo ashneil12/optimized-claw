@@ -32,9 +32,12 @@ function resolveWorkspaceToolContext(options: {
     return null;
   }
   // workspace_search is only available when business mode is active.
+  // Supports both OPENCLAW_BUSINESS_MODE=1 and OPENCLAW_BUSINESS_MODE_ENABLED=true
+  // (matching the pattern in workspace.ts).
+  const shortFlag = process.env.OPENCLAW_BUSINESS_MODE?.trim();
+  const longFlag = process.env.OPENCLAW_BUSINESS_MODE_ENABLED?.trim();
   const businessModeEnabled =
-    process.env.OPENCLAW_BUSINESS_MODE?.trim() === "1" ||
-    process.env.OPENCLAW_BUSINESS_MODE?.trim() === "true";
+    shortFlag === "1" || shortFlag === "true" || longFlag === "1" || longFlag === "true";
   if (!businessModeEnabled) {
     return null;
   }
