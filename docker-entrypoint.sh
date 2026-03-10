@@ -698,9 +698,10 @@ if [ "${OPENCLAW_QMD_ENABLED:-false}" = "true" ] || [ "${OPENCLAW_QMD_ENABLED:-f
     echo "[entrypoint] Installing qmd memory sidecar..."
     BUN_BIN="/root/.bun/bin/bun"
     if [ -f "$BUN_BIN" ]; then
-      "$BUN_BIN" install --trust -g https://github.com/tobi/qmd 2>&1 | tail -3
-      # Find the installed TS entry point and create a bun-run shim at /usr/local/bin/qmd
-      QMD_SRC=$(find /root/.bun /home -path "*/node_modules/@tobilu/qmd/src/qmd.ts" 2>/dev/null | head -1)
+      # Pinned to v1.1.6 — bun install -g from GitHub installs source (not compiled dist/).
+      # Search bun's global install location for src/qmd.ts and create a bun-run shim.
+      "$BUN_BIN" install --trust -g 'https://github.com/tobi/qmd#v1.1.6' 2>&1 | tail -3
+      QMD_SRC=$(find /root/.bun/install/global /root/.bun -path "*/node_modules/@tobilu/qmd/src/qmd.ts" 2>/dev/null | head -1)
       if [ -n "$QMD_SRC" ]; then
         printf '#!/bin/sh\nexec /root/.bun/bin/bun run %s "$@"\n' "$QMD_SRC" > /usr/local/bin/qmd
         chmod +x /usr/local/bin/qmd

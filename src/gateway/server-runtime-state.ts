@@ -127,13 +127,19 @@ export async function createGatewayRuntimeState(params: {
   };
 
   const bindHosts = await resolveGatewayListenHosts(params.bindHost);
-  if (!isLoopbackHost(params.bindHost)) {
+  // On the OCS managed platform these flags are intentionally set and safe;
+  // skip warnings that would alarm self-hosted users unfamiliar with the setup.
+  const isManagedPlatform = process.env.OPENCLAW_MANAGED_PLATFORM === "1";
+  if (!isLoopbackHost(params.bindHost) && !isManagedPlatform) {
     params.log.warn(
       "⚠️  Gateway is binding to a non-loopback address. " +
         "Ensure authentication is configured before exposing to public networks.",
     );
   }
-  if (params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true) {
+  if (
+    params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true &&
+    !isManagedPlatform
+  ) {
     params.log.warn(
       "⚠️  gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true is enabled. " +
         "Host-header origin fallback weakens origin checks and should only be used as break-glass.",

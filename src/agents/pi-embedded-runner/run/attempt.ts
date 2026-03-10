@@ -90,7 +90,7 @@ import { sanitizeToolCallIdsForCloudCodeAssist } from "../../tool-call-id.js";
 import { resolveEffectiveToolFsWorkspaceOnly } from "../../tool-fs-policy.js";
 import { normalizeToolName } from "../../tool-policy.js";
 import { resolveTranscriptPolicy } from "../../transcript-policy.js";
-import { DEFAULT_BOOTSTRAP_FILENAME } from "../../workspace.js";
+import { DEFAULT_BOOTSTRAP_FILENAME, isWorkspaceOnboardingCompleted } from "../../workspace.js";
 import { isRunnerAbortError } from "../abort.js";
 import { appendCacheTtlTimestamp, isCacheTtlEligibleProvider } from "../cache-ttl.js";
 import type { CompactEmbeddedPiSessionParams } from "../compact.js";
@@ -1676,16 +1676,29 @@ export async function runEmbeddedAttempt(
           }
         }
 
-        // Bootstrap first-turn override: when BOOTSTRAP.md is present and this is the
-        // first message in a fresh session, prepend a short directive to the user's message.
-        // This places the bootstrap instruction at maximum proximity to the user turn,
-        // which is critical for cheaper models that ignore mid-system-prompt instructions.
+        // Bootstrap first-turn override: when BOOTSTRAP.md is present, this is the first
+        // message in a fresh session, AND onboarding has not yet been completed, prepend a
+        // short directive to the user's message. This places the bootstrap instruction at
+        // maximum proximity to the user turn, which is critical for cheaper models that
+        // ignore mid-system-prompt instructions.
+        // NOTE: We guard on onboarding NOT completed to prevent this from firing on every
+        // new conversation (e.g. each new Telegram/Discord thread) for already-onboarded
+        // workspaces that still have BOOTSTRAP.md physically present on disk.
         const hasBootstrapFileForPrepend = hookAdjustedBootstrapFiles.some(
           (f) => f.name === DEFAULT_BOOTSTRAP_FILENAME && !f.missing,
         );
         if (hasBootstrapFileForPrepend && prePromptMessageCount === 0) {
-          effectivePrompt = `[SYSTEM: BOOTSTRAP.md is present — this is a first-run workspace. You MUST follow the bootstrap protocol as your FIRST action. Do NOT respond casually or greet the user normally. Start with the bootstrap introduction as described in BOOTSTRAP.md.]\n\n${effectivePrompt}`;
-          log.debug("bootstrap: prepended first-turn bootstrap reminder to user prompt");
+          let onboardingAlreadyDone = false;
+          try {
+            onboardingAlreadyDone = await isWorkspaceOnboardingCompleted(effectiveWorkspace);
+          } catch {
+            // If we can't read the workspace state, assume onboarding is NOT done
+            // so we err on the side of showing the bootstrap reminder.
+          }
+          if (!onboardingAlreadyDone) {
+            effectivePrompt = `[SYSTEM: BOOTSTRAP.md is present — this is a first-run workspace. You MUST follow the bootstrap protocol as your FIRST action. Do NOT respond casually or greet the user normally. Start with the bootstrap introduction as described in BOOTSTRAP.md.]\n\n${effectivePrompt}`;
+            log.debug("bootstrap: prepended first-turn bootstrap reminder to user prompt");
+          }
         }
 
         log.debug(`embedded run prompt start: runId=${params.runId} sessionId=${params.sessionId}`);

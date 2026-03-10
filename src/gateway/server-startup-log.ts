@@ -34,8 +34,11 @@ export function logGatewayStartup(params: {
     params.log.info("gateway: running in Nix mode (config managed externally)");
   }
 
+  // On the OCS managed platform, dangerous flags are intentionally configured
+  // (e.g. dangerouslyDisableDeviceAuth, dangerouslyAllowHostHeaderOriginFallback).
+  // Suppress the warning there to avoid alarming operators; self-hosted users still see it.
   const enabledDangerousFlags = collectEnabledInsecureOrDangerousFlags(params.cfg);
-  if (enabledDangerousFlags.length > 0) {
+  if (enabledDangerousFlags.length > 0 && process.env.OPENCLAW_MANAGED_PLATFORM !== "1") {
     const warning =
       `security warning: dangerous config flags enabled: ${enabledDangerousFlags.join(", ")}. ` +
       "Run `openclaw security audit`.";

@@ -39,6 +39,14 @@ You wake up fresh each session. These files are your continuity:
 
 See SOUL.md § Memory & Learning for the full rules. The short version: **no mental notes, write immediately, self-correct by updating this file.**
 
+### 🔍 Search Before Answering
+
+For any non-trivial question — anything with a project, technical, operational, strategic, or historical angle — **run `memory_search` with 2–3 keywords before responding**. This covers personal memory (`MEMORY.md`, `memory/*.md`) and any workspace knowledge files (`business/`, `memory/knowledge/`, etc.).
+
+Skip the search only for: simple greetings, casual one-liners, or pure general knowledge where workspace context clearly doesn't apply.
+
+When in doubt: search first, answer second.
+
 ### 🧠 MEMORY.md Security
 
 - **ONLY load in main session** (direct chats with your human)

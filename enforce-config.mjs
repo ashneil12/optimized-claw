@@ -618,13 +618,9 @@ function enforceCore(configPath) {
   ensure(config, "logging");
   config.logging.redactSensitive = "tools";
 
-  // Plugins — explicitly trust our non-bundled plugins so the loader
-  // doesn't warn about auto-loading unknown extensions.
-  const plugins = ensure(config, "plugins");
-  plugins.allow = ["openclaw-honcho"];
-  if (isTruthy(env("CAMOFOX_ENABLED"))) {
-    plugins.allow.push("camofox-browser");
-  }
+  // Plugins — no allow list means all plugins are eligible to load (open by default).
+  // An explicit allow array would restrict to only listed IDs; omitting it is intentional.
+  ensure(config, "plugins");
 
   // Gateway UI / bind / port
   const gateway = ensure(config, "gateway");
