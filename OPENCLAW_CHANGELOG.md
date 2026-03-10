@@ -5,6 +5,65 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Workspace Auto-Indexing & `workspace_search` Tool (2026-03-10)
+
+**Purpose:** Add a second search layer that is workspace-aware and distinct from personal memory search. Previously, `memory_search` searched everything — QMD indexes personal memory and business documents in the same pool, so there was no clean way for an agent to search only workspace documents (e.g. `business/`, notes, docs) vs only personal memories. This change auto-indexes the workspace root on boot and exposes a `workspace_search` tool that searches only workspace-kind collections.
+
+### Changes (moltbotserver-source)
+
+| File                                        | Change                                                                                                                                                                                      | Why                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `src/memory/types.ts`                       | Added `"workspace"` to `MemorySource` union                                                                                                                                                 | New source kind for workspace-mapped QMD collections |
+| `src/memory/manager-sync-ops.ts`            | Added `"workspace"` to source guards in `resolveConfiguredSourcesForMeta` and `normalizeMetaSources`                                                                                        | Source kind must flow through sync operations        |
+| `src/memory/qmd-manager.ts`                 | `bootstrapCollections` maps `kind=workspace` → `source=workspace`; `ensureCollectionPath` type extended                                                                                     | Boot-time workspace collection creation              |
+| `src/memory/backend-config.ts`              | Added `"workspace"` to `ResolvedQmdCollection.kind`; added `resolveDefaultWorkspaceCollection()` and `resolveWorkspacePaths()`                                                              | Config resolution for workspace-kind collections     |
+| `src/memory/backend-config.test.ts`         | 3 new test cases for workspace collection resolution                                                                                                                                        | Coverage                                             |
+| `src/config/types.memory.ts`                | Added `workspacePaths?: MemoryQmdIndexPath[]` to `MemoryQmdConfig`                                                                                                                          | Config schema for custom workspace index paths       |
+| `src/agents/tools/workspace-search-tool.ts` | **NEW** — `createWorkspaceSearchTool()`: searches only `source === "workspace"` QMD collections                                                                                             | Clean separation from personal memory search         |
+| `src/agents/tool-catalog.ts`                | Added `workspace_search` entry in memory section                                                                                                                                            | Tool registration                                    |
+| `src/plugins/runtime/runtime-tools.ts`      | Exported `createWorkspaceSearchTool`                                                                                                                                                        | Plugin runtime export                                |
+| `src/plugins/runtime/types-core.ts`         | Added `createWorkspaceSearchTool` to `PluginRuntimeCore.tools`                                                                                                                              | Interface extension                                  |
+| `src/agents/system-prompt.ts`               | Updated `buildMemorySection` to mention `workspace_search` availability; updated business-mode KB instructions to mandate both `memory_search` AND `workspace_search` before every response | Agents know to use both tools                        |
+
+### Design Decisions
+
+- **Auto-indexed on boot** — QMD registers `workspace-<agentId>` collection pointing at workspace root (pattern `**/*.md`) whenever QMD backend is active. No manual configuration needed.
+- **Business mode gating** — `workspace_search` only appears in the tool catalog when `OPENCLAW_BUSINESS_MODE_ENABLED=true` (or `OPENCLAW_BUSINESS_MODE=1`) AND QMD backend is active.
+- **`memory_search` unchanged** — still covers personal memory only. The two tools are intentionally disjoint.
+- **Dual env var support** — `OPENCLAW_BUSINESS_MODE_ENABLED` OR `OPENCLAW_BUSINESS_MODE` both activate workspace search (matches human mode pattern and the existing dashboard env var).
+
+### Upstream Sync Risk
+
+**Medium for `src/memory/types.ts`** — `MemorySource` union is actively maintained upstream. Check for new source kinds that might conflict with `"workspace"`.
+**Medium for `src/memory/qmd-manager.ts`** — `bootstrapCollections` and `ensureCollectionPath` are core memory infrastructure. If upstream restructures these, the workspace collection registration needs re-wiring.
+**Medium for `src/memory/backend-config.ts`** — `resolveMemoryBackendConfig` and `ResolvedQmdCollection` are extended. Check for upstream changes to `kind` discriminator.
+**Low for `src/agents/tool-catalog.ts`** — single array entry, additive.
+**Low for `src/agents/system-prompt.ts`** — targeted `buildMemorySection` addition and business-mode section update.
+**None for `workspace-search-tool.ts`** — fully custom new file.
+
+---
+
+## Docker QMD Find Path Fix (2026-03-10)
+
+**Purpose:** Fix Docker build failures caused by bun installing `@tobilu/qmd` to a non-deterministic path that changes between bun versions. The previous `find` searched only `/root/.bun/install/global` and `/root/.bun`, which stopped matching after a bun update.
+
+### Changes
+
+| File         | Change                                                                                                                                    | Why                                                                                                                               |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Dockerfile` | Changed `find /root/.bun/install/global /root/.bun` to `find / -not -path "/proc/*" -not -path "/sys/*"` in the QMD source detection step | Searches the entire filesystem (excluding noisy kernel paths), so the build succeeds regardless of where bun installs the package |
+
+### Design Decisions
+
+- **Belt-and-suspenders** — the broader `find /` is slightly slower at build time but eliminates fragility. A faster fix would be `$(bun pm ls -g 2>/dev/null | ...)` but that requires bun to expose a stable pkg path API.
+- **Excluded paths** — `/proc` and `/sys` excluded to avoid kernel file descriptor crawling.
+
+### Upstream Sync Risk
+
+**Low.** `Dockerfile` is fully custom. If upstream updates the QMD install step, check whether their path resolution matches the current bun global install layout.
+
+---
+
 ## Remove Slim Docker Build Variant (2026-03-09)
 
 **Purpose:** Drop the `bookworm-slim` Docker image variant from CI. The slim base saved ~270MB upfront but the runtime stage installs the full agent CLI tooling (python3, ffmpeg, pandoc, etc.) unconditionally, negating most of the size savings. Building both variants doubled CI build time for negligible benefit.
