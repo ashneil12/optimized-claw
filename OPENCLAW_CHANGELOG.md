@@ -5,6 +5,114 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Workspace Document Auto-Converter (2026-03-11)
+
+**Purpose:** Automatically convert non-markdown files (PDF, TXT, DOCX, ODT, CSV, EPUB) dropped into the workspace to markdown so that QMD can index them without any manual steps. The converter is fully deterministic — no LLM involved.
+
+### Architecture
+
+```
+docker-entrypoint.sh
+  └─ background sidecar: scripts/workspace-doc-converter.sh --interval 300
+       │  poll WORKSPACE_DIR every 5 minutes
+       │  for each .pdf → pdftotext (poppler-utils)
+       │  for each .txt → direct copy with header
+       │  for each .docx/.odt/.rtf/.epub → pandoc (gfm output)
+       │  for each .csv → awk → markdown table
+       └─ write <basename>.md alongside source with AUTO-CONVERTED header
+            QMD picks up new .md on next 5-minute workspace collection re-index
+```
+
+### Changes (moltbotserver-source)
+
+| File                                 | Change                                                          | Notes                                                                                                                                                                                                                                                                                 |
+| ------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/workspace-doc-converter.sh` | **NEW** — polling converter script                              | Idempotent (skips if .md is newer than source), never overwrites user-created .md files (only overwrites its own prior output identified by `AUTO-CONVERTED` header). Log rotation at 512KB to `workspace/converter-log/converter.log`. Flags: `--once`, `--force`, `--interval <s>`. |
+| `docker-entrypoint.sh`               | Added background sidecar launch before `exec "$@"`              | Gated on `OPENCLAW_DOC_CONVERTER_ENABLED` (default: `true`). Set to `false` or `0` to disable per-instance.                                                                                                                                                                           |
+| `cron/default-jobs.json`             | Added `workspace-doc-converter` job entry (disabled by default) | Provides an on-demand forced pass when the agent needs to re-index a batch of newly dropped files immediately.                                                                                                                                                                        |
+
+### Supported Formats
+
+| Extension                        | Converter                              | Tool Required                                       |
+| -------------------------------- | -------------------------------------- | --------------------------------------------------- |
+| `.pdf`                           | Text extraction with layout            | `pdftotext` (poppler-utils — already in Dockerfile) |
+| `.txt`                           | Direct copy with AUTO-CONVERTED header | Built-in                                            |
+| `.docx`, `.odt`, `.rtf`, `.epub` | Full document conversion               | `pandoc` (already in Dockerfile)                    |
+| `.csv`                           | `awk` → markdown table                 | Built-in                                            |
+
+### Design Decisions
+
+- **Idempotent by default** — if an up-to-date `.md` already exists, the file is skipped. The `AUTO-CONVERTED` marker in the first line is the sentinel; user-created `.md` files alongside the source are never overwritten.
+- **No inotifywait dependency** — uses a simple polling loop to avoid adding `inotify-tools` to the Dockerfile. 5-minute poll interval is appropriate for workspace use cases.
+- **Both converters already installed** — `pandoc` and `poppler-utils` are in the existing agent CLI tooling `RUN` block in the Dockerfile.
+- **Log rotation** — cap at 512KB prevents disk fill from long-running containers.
+
+### Upstream Sync Risk
+
+**None.** `scripts/workspace-doc-converter.sh` is a fully custom new file. `docker-entrypoint.sh` and `cron/default-jobs.json` are fully custom.
+
+---
+
+## `workspace_search` QMD Initialization Hardening (2026-03-11)
+
+**Purpose:** Fix `workspace_search` silently disappearing on fresh container instances. On first deploy, `qmd` binary compilation (llama.cpp) takes longer than the 30-second command timeout, causing `addCollection` to time out. The tool then registered without a backing collection, making every search return empty. Silent failure made this nearly impossible to diagnose.
+
+### Root Cause
+
+Three compounding issues:
+
+1. `addCollection` timed out during initial `qmd` compilation on cold containers.
+2. No retry — a single failure permanently left the collection un-registered for the life of the container.
+3. No warning — failure was swallowed silently with no log message indicating the tool was degraded.
+
+### Changes (moltbotserver-source)
+
+| File                        | Change                                                                                                                                                                                                                                                                                        | Upstream Risk            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `src/memory/qmd-manager.ts` | Added `addCollectionWithRetry()` — wraps `addCollection` with 3 attempts, 5-second delay. Collection-already-exists errors short-circuit (not treated as failure).                                                                                                                            | Low — new private method |
+| `src/memory/qmd-manager.ts` | Added `warnIfWorkspaceCollectionsEmpty()` — post-boot health check. Queries QMD SQLite index directly; logs a prominent `[workspace_search] WARNING` if any workspace collection has zero indexed documents.                                                                                  | Low — new private method |
+| `docker-entrypoint.sh`      | Added `qmd status` pre-warm step after QMD install but before gateway start. Forces llama.cpp compilation during entrypoint phase (no command timeout). Subsequent boots are sub-second.                                                                                                      | None — custom file       |
+| `docker-entrypoint.sh`      | Fixed pre-warm env: was using wrong state dir default (`/home/node/data`); now uses `CONFIG_DIR` (already resolved at entrypoint top with correct `/home/node/.clawdbot` default). Added `XDG_CONFIG_HOME` and `QMD_CONFIG_DIR` to mirror the exact env set by `QmdMemoryManager` at runtime. | None — custom file       |
+
+### Design Decisions
+
+- **Three-pronged approach** — pre-warm eliminates the root cause; retry handles edge cases on slow hardware; health-check warns if some failure still slips through. Silent failures become actionable log alerts.
+- **`addCollectionWithRetry` distinguishes errors** — collection-already-exists is treated as success (idempotent), other errors are retried, persistent failures log and continue (tool degrades gracefully rather than crashing gateway boot).
+- **Pre-warm env exactness matters** — `QmdMemoryManager` sets `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, and `QMD_CONFIG_DIR` at runtime. The pre-warm must set the same env or `qmd status` writes to a different state dir, causing a cache miss on the actual first run.
+
+### Upstream Sync Risk
+
+**Low for `qmd-manager.ts`** — new private methods appended. If upstream changes `addCollection` signature, update the wrapper.
+**None for `docker-entrypoint.sh`** — fully custom file.
+
+---
+
+## `workspace_search` Tool Availability & Cleanup (2026-03-11)
+
+**Purpose:** Remove the business-mode-only gate from `workspace_search` so it is available whenever QMD is configured and a workspace collection exists. Also fix 5 bugs found during cleanup audit of the recent workspace_search implementation.
+
+### Changes (moltbotserver-source)
+
+| File                                        | Change                                                                                                                                                                                              | Upstream Risk      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `src/agents/tools/workspace-search-tool.ts` | Removed `OPENCLAW_BUSINESS_MODE` / `OPENCLAW_BUSINESS_MODE_ENABLED` gate from `resolveWorkspaceToolContext()` — tool now registers whenever QMD backend is active and a workspace collection exists | None — custom file |
+| `src/agents/tools/workspace-search-tool.ts` | Eliminated duplicate `resolveMemoryBackendConfig()` call — config resolved once in context check, threaded via `ctx.resolved`, not called again in `execute()` on every search                      | None — custom file |
+| `src/memory/qmd-manager.ts`                 | Fixed `warnIfWorkspaceCollectionsEmpty` SQLite bug: `.get(...spread)` with `node:sqlite` `StatementSync` is unreliable for dynamic parameterization; replaced with per-collection `COUNT` loop      | Low                |
+| `src/memory/qmd-manager.ts`                 | Cleaned up verbose `[memory]` prefix in log messages — logger subsystem adds context automatically                                                                                                  | Low                |
+| `src/agents/system-prompt.ts`               | Updated `workspace_search` description in Memory Recall section from business-specific framing to generic ("search all workspace documents")                                                        | Low                |
+| `src/agents/tool-catalog.ts`                | Updated `workspace_search` catalog description from "Search workspace docs (business, project)" to "Search all indexed documents in the workspace"                                                  | Low                |
+
+### Design Decisions
+
+- **Business mode gate removal** — business mode now only influences system prompt directives (mandatory dual-search) rather than tool availability. Any instance with QMD + workspace path configured gets the tool.
+- **Three-place description sync** — tool definition, system prompt, and tool catalog all had different descriptions; now consistent.
+
+### Upstream Sync Risk
+
+**Low.** Changes to `system-prompt.ts` and `tool-catalog.ts` are in MoltBot-custom sections. `workspace-search-tool.ts` and `qmd-manager.ts` are primarily custom.
+
+---
+
 ## OpenClaw Backup System (2026-03-11)
 
 **Purpose:** Implement a full-lifecycle backup system for OpenClaw instances deployed on MoltBot. Backups protect against accidental data loss, enable migration from community OpenClaw to MoltBot ("import to switch"), and lay the groundwork for disaster recovery. The system operates entirely within the existing Supabase project (no external storage services).
