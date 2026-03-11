@@ -5,6 +5,183 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## OpenClaw Backup System (2026-03-11)
+
+**Purpose:** Implement a full-lifecycle backup system for OpenClaw instances deployed on MoltBot. Backups protect against accidental data loss, enable migration from community OpenClaw to MoltBot ("import to switch"), and lay the groundwork for disaster recovery. The system operates entirely within the existing Supabase project (no external storage services).
+
+### Architecture
+
+```
+Container (backup-upload.sh)
+  │  openclaw backup create → .tar.gz archive
+  │  openclaw backup verify → integrity check (3 attempts, retry on fail)
+  │  POST /api/instances/{id}/openclaw-backups/upload  → stores to Supabase Storage
+  │  On permanent failure: POST /api/instances/{id}/alert
+  ▼
+Supabase Storage ("openclaw-backups" bucket)
+  └─ {instance_id}/{timestamp}-openclaw-backup.tar.gz
+
+Dashboard (Next.js API + UI)
+  ├─ GET  /api/instances/{id}/openclaw-backups        → list backups
+  ├─ GET  /api/instances/{id}/openclaw-backups/{bid}/download → signed URL (60s)
+  ├─ DELETE /api/instances/{id}/openclaw-backups      → delete backup
+  ├─ POST /api/instances/{id}/openclaw-backups/import → upload .tar.gz from user
+  ├─ POST /api/instances/{id}/openclaw-backups/restore → set pending restore target
+  ├─ DELETE /api/instances/{id}/openclaw-backups/restore → clear restore target
+  ├─ GET|PATCH /api/instances/{id}/backup-config      → read/update schedule config
+  ├─ POST /api/cron/cleanup-backups                   → purge expired records + storage
+  └─ POST /api/instances/{id}/alert                   → container alert ingestion
+
+Container on next boot (docker-entrypoint.sh):
+  If MOLTBOT_RESTORE_BACKUP_KEY set → restore-from-backup.sh → extract all asset kinds
+```
+
+### Scripts (moltbotserver-source)
+
+| File                             | Change                                                                                                                                                                                           | Notes                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/backup-upload.sh`       | **NEW** (was placeholder) — full retry loop (3 attempts), `openclaw backup create` + `verify`, Supabase Storage upload, DB insert via dashboard API                                              | Env-driven: `MOLTBOT_BACKUP_MAX_ATTEMPTS`, `MOLTBOT_BACKUP_RETRY_DELAY`, `MOLTBOT_LOCAL_RETENTION_DAYS` (14d), `MOLTBOT_SUPABASE_RETENTION_DAYS` (7d) |
+| `scripts/backup-upload.sh`       | `notify_failure()` — builds JSON via Python heredoc into temp file, POSTs to `/alert` endpoint; safe against special chars in titles/messages                                                    | Uses `--data-binary @file` instead of inline `-d` interpolation                                                                                       |
+| `scripts/restore-from-backup.sh` | **NEW** — downloads from Supabase Storage, verifies tar integrity, reads `manifest.json`, maps all four asset kinds (`config`, `state`, `credentials`, `workspace`) to correct destination paths | Writes restore-complete marker; idempotent — skips on subsequent boots                                                                                |
+
+### API Routes (moltbot-dashboard)
+
+| File                                                          | Change                                                                                                                                                                                                         |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api/instances/[id]/openclaw-backups/upload/route.ts`         | `user_id` derived server-side from `instances.user_id` (UUID) — container no longer handles user credentials                                                                                                   |
+| `api/instances/[id]/openclaw-backups/import/route.ts`         | Accepts multipart `.tar.gz` upload; extracts `manifest.json` from archive using a zero-dependency pure-Node tar reader; inserts record with `source='import'`; `user_id` from instance row (UUID not Clerk ID) |
+| `api/instances/[id]/openclaw-backups/restore/route.ts`        | POST sets `pending_restore_backup_id` + `pending_restore_key` on instance; DELETE clears them. Both have rate limiting, ownership checks, proper error handling                                                |
+| `api/instances/[id]/openclaw-backups/[bid]/download/route.ts` | Generates 60-second signed Supabase Storage URL                                                                                                                                                                |
+| `api/instances/[id]/backup-config/route.ts`                   | GET/PATCH for `instance_backup_config` (enabled, interval_hours, only_config, retention_days)                                                                                                                  |
+| `api/instances/[id]/alert/route.ts`                           | Internal endpoint — Bearer = `SUPABASE_SERVICE_ROLE_KEY`; derives `user_id` from instance row; rate-limited 10/hr per instance; UUID validation on instance ID                                                 |
+| `api/cron/cleanup-backups/route.ts`                           | Paginated loop (100 records/batch) — deletes Supabase Storage objects then DB rows; runs until all expired records cleared; GET dry-runs the count                                                             |
+
+### Database Schema
+
+| Table                    | Key Columns                                                                                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openclaw_backups`       | `id`, `instance_id`, `user_id` (UUID), `storage_key`, `size_bytes`, `source` (`cron`/`manual`/`import`), `verified`, `manifest` (JSONB), `expires_at`, `label` |
+| `instance_backup_config` | `instance_id`, `enabled`, `interval_hours`, `only_config`, `retention_days` (default 7)                                                                        |
+| `instance_alerts`        | `id`, `instance_id`, `user_id` (UUID), `kind`, `category`, `title`, `message`, `dismissed`                                                                     |
+| `instances` (modified)   | Added `pending_restore_backup_id`, `pending_restore_key`                                                                                                       |
+
+RLS policies: owner-only select/delete on all backup tables; service role only for inserts from container.
+
+### Environment Variables
+
+| Variable                            | Injected By            | Purpose                                  |
+| ----------------------------------- | ---------------------- | ---------------------------------------- |
+| `MOLTBOT_BACKUP_ENABLED`            | Dashboard              | Enable/disable scheduled backups         |
+| `MOLTBOT_INSTANCE_ID`               | Dashboard              | Instance identifier for upload path      |
+| `MOLTBOT_SUPABASE_URL`              | Dashboard              | Supabase project URL                     |
+| `MOLTBOT_SUPABASE_SERVICE_ROLE_KEY` | Dashboard              | Auth for storage + alert endpoint        |
+| `MOLTBOT_BACKUP_INTERVAL_MS`        | Dashboard              | Backup frequency (default 12h)           |
+| `MOLTBOT_DASHBOARD_URL`             | Dashboard              | Base URL for alert callback              |
+| `MOLTBOT_RESTORE_BACKUP_KEY`        | Dashboard (on restore) | Storage key to restore on next boot      |
+| `MOLTBOT_RESTORE_BACKUP_ID`         | Dashboard (on restore) | Backup record ID (cleared after restore) |
+
+`MOLTBOT_USER_ID` has been **removed** — `user_id` is now always derived server-side.
+
+### Design Decisions
+
+- **Retry + verify then upload**: `backup-upload.sh` runs `create` → `verify` as a unit. If verify fails, the corrupt archive is deleted and the cycle retries (up to `MAX_ATTEMPTS`). Only a verified archive is uploaded. On permanent failure, an alert is written via the dashboard (not direct Supabase insert) so the container never needs to know about `user_id`.
+- **Retention**: Supabase 7 days (default), local 14 days. Set via env vars per-instance. Cleanup runs via a cron endpoint that batches deletions.
+- **Import flow**: User exports via `openclaw backup create`, uploads the `.tar.gz` through the dashboard. We parse `manifest.json` from the archive (pure Node.js tar reader, no dependencies) to validate the schema version and extract asset metadata. Archive is stored and marked `source='import'`.
+- **Restore flow**: Dashboard sets `pending_restore_key` on the instance. On next container boot, `docker-entrypoint.sh` detects the key and runs `restore-from-backup.sh`, which downloads and extracts all four asset kinds to their canonical paths. A restore-complete marker prevents double-restore.
+- **No Cloudflare / R2**: Intentionally using Supabase Storage only. Simpler architecture, signed URLs for security.
+
+### Upstream Sync Risk
+
+**None.** All modified files are fully custom (`backup-upload.sh`, `restore-from-backup.sh`, `docker-entrypoint.sh` backup hook, `enforce-config.mjs` backup cron seeding, dashboard API routes, migration).
+
+---
+
+**Purpose:** Fix the browser tool not being available to agents despite `OPENCLAW_BROWSER_ENABLED=true`. The live server had `tools.profile = "coding"` which produced an explicit allowlist that excluded `browser`, `canvas`, `nodes`, `agents_list`, and other non-coding tools. Also changed the platform default to `"full"` (no restrictions) for all agents.
+
+### Root Cause
+
+`tools.profile = "coding"` was set during initial provisioning. The `"coding"` profile builds an explicit `allow` list from tools that declare `profiles: ["coding"]`. Since `browser` had `profiles: []` in `tool-catalog.ts`, it was absent from that allowlist — the browser tool was registered in the runtime but silently excluded before reaching the LLM.
+
+### Changes
+
+| File                                   | Change                                                                                                                             | Upstream Risk              |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `src/agents/tool-catalog.ts`           | `browser` tool: `profiles: []` → `profiles: ["coding"]` — ensures browser is included even under a coding profile                  | Low — additive array entry |
+| `enforce-config.mjs`                   | `enforceCore()`: added `tools.profile = "full"` — overwrites any stale narrower profile on every gateway restart                   | None — fully custom file   |
+| `enforce-config.mjs`                   | When `OPENCLAW_BROWSER_ENABLED=true`: adds `"browser"` to `tools.alsoAllow` — belt-and-suspenders guarantee independent of profile | None — fully custom file   |
+| `.agents/skills/create-agent/SKILL.md` | Step 1a now asks for tool permissions; defaults to `full`; describes all four profile levels                                       | None — fully custom file   |
+
+### Behavior After Fix
+
+- All existing and new instances: `tools.profile = "full"` enforced on every gateway start (no profile-based tool restrictions)
+- Even if profile is somehow set to `"coding"` again, `browser` is now in that profile's allowlist
+- Even if only the `alsoAllow` path applies, `"browser"` is always explicitly in the effective allowlist when browser is enabled
+
+### Upstream Sync Risk
+
+**Low for `tool-catalog.ts`** — single field change in a custom-maintained tool entry. If upstream changes the `browser` entry's structure, re-apply.
+**None for `enforce-config.mjs`** and skill files — fully custom.
+
+---
+
+## Browser Cleanup Cron Fix (2026-03-11)
+
+**Purpose:** Fix the `browser-cleanup` cron job failing silently. The agent was responding "no browser-control tool here" because (1) the browser tool was blocked by the coding profile (see above), and (2) the cron message used pseudo-syntax (`action=tabs`) without telling the agent to call the `browser` tool by name.
+
+### Changes
+
+| File                     | Change                                                                                                                                                                       | Upstream Risk       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `enforce-config.mjs`     | `browser-cleanup` cron: `enabled: true` → `enabled: isTruthy(env("OPENCLAW_BROWSER_ENABLED", "false"))` — only enabled on browser-configured instances                       | None — fully custom |
+| `enforce-config.mjs`     | Cron message rewritten: explicit `browser(action="status")` first with `NO_REPLY` exit if unavailable; explicit `browser(action="tabs")` and `browser(action="close")` calls | None — fully custom |
+| `cron/default-jobs.json` | Reference file updated to match new message format                                                                                                                           | None — seed file    |
+
+### Design Decisions
+
+- **Status-first pattern**: Agent calls `browser(action="status")` before doing anything. If browser is unreachable (container down), responds `NO_REPLY` cleanly instead of hallucinating a failure or exhausting retries.
+- **Explicit tool calls in message**: Cron prompts now name the tool (`browser(action=...)`) instead of using pseudo-syntax. Models reason from tool descriptions — naming the tool directly eliminates guessing.
+- **Disabled on non-browser instances**: The `OPENCLAW_BROWSER_ENABLED` gate prevents the job seeding as `enabled: true` on instances that have no browser container, avoiding persistent cron failures.
+
+### Upstream Sync Risk
+
+**None.** All modified files are fully custom.
+
+---
+
+## Control UI — Exec Approval Modal Viewport Fix (2026-03-11)
+
+**Purpose:** Fix exec approval prompts that were impossible to action when the command being approved was a long inline script (e.g. a Python heredoc). The `.exec-approval-command` code block had no height cap, so the approval card expanded past the viewport and the Approve/Deny buttons were pushed off screen. The gateway approval timeout fired before the user could scroll down and click.
+
+### What Changed
+
+| File                           | Change                                                                                                                | Upstream Risk    |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `ui/src/styles/components.css` | `.exec-approval-command`: added `max-height: 200px; overflow-y: auto` — long scripts scroll inside a bounded code box | None — custom UI |
+| `ui/src/styles/components.css` | `.exec-approval-card`: added `max-height: calc(100vh - 48px); overflow-y: auto` — card can never escape the viewport  | None — custom UI |
+| `dist/control-ui/`             | Rebuilt from source (`npm run build` in `ui/`)                                                                        | N/A              |
+
+### Root Cause
+
+`ui/src/ui/views/exec-approval.ts` renders `${request.command}` verbatim with no truncation:
+
+```html
+<div class="exec-approval-command mono">${request.command}</div>
+```
+
+When an agent runs a multi-line Python heredoc via exec (common for subreddit/web-fetch scripts), the full script — often 800–900 chars, 30+ lines — is the raw `command` value. Without a height cap, the card stretches unconstrained, pushing the action buttons below the fold. The approval window is short-lived (gateway timeout), so the approval expires unreachable.
+
+### Design Decisions
+
+- **CSS-only fix** — no changes to the Lit component state model required. Internal scroll handles any script length gracefully.
+- **200px cap** on the command block (~8–10 lines of context) keeps buttons always in view while still showing enough to identify what's running.
+- **Card-level `100vh - 48px` cap** is a belt-and-suspenders guard covering cases with many metadata rows or an error message.
+
+### Upstream Sync Risk
+
+**None.** `ui/` is a fully custom directory not present in upstream OpenClaw.
+
+---
+
 ## enforce-config.mjs Dead Code Cleanup (2026-03-10)
 
 **Purpose:** Remove ~115 lines of unreachable/dead code from `ensureAgentBrowserContainers` to improve maintainability.
