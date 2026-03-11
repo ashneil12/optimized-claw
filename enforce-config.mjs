@@ -1825,7 +1825,24 @@ function seedSubAgentCronJobs(dataDir) {
     return;
   }
 
-  const workspaceDirs = entries.filter((e) => e.isDirectory() && e.name.startsWith("workspace-"));
+  // Use statSync (follows symlinks) instead of e.isDirectory() which returns false for symlinks.
+  // Sub-agent workspaces may be symlinks to /home/node/workspace/agents/<name> and must be included.
+  const workspaceDirs = entries.filter((e) => {
+    if (!e.name.startsWith("workspace-")) {
+      return false;
+    }
+    if (e.isDirectory()) {
+      return true;
+    }
+    if (e.isSymbolicLink()) {
+      try {
+        return statSync(`${dataDir}/${e.name}`).isDirectory();
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   if (workspaceDirs.length === 0) {
     return; // No sub-agents — nothing to do
