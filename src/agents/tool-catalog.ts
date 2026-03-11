@@ -108,7 +108,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
   {
     id: "workspace_search",
     label: "workspace_search",
-    description: "Search workspace docs (business, project)",
+    description: "Search all indexed documents in the workspace",
     sectionId: "memory",
     profiles: ["coding"],
     includeInOpenClawGroup: true,

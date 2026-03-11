@@ -43,7 +43,7 @@ function resolveWorkspaceToolContext(options: {
   if (!hasWorkspaceCollection) {
     return null;
   }
-  return { cfg, agentId };
+  return { cfg, agentId, resolved };
 }
 
 export function createWorkspaceSearchTool(options: {
@@ -54,7 +54,7 @@ export function createWorkspaceSearchTool(options: {
   if (!ctx) {
     return null;
   }
-  const { cfg, agentId } = ctx;
+  const { cfg, agentId, resolved } = ctx;
   return {
     label: "Workspace Search",
     name: "workspace_search",
@@ -94,7 +94,6 @@ export function createWorkspaceSearchTool(options: {
         });
         // Filter to workspace sources only — exclude personal memory and sessions.
         const workspaceResults = allResults.filter((r) => r.source === "workspace");
-        const resolved = resolveMemoryBackendConfig({ cfg, agentId });
         const budget = resolved.qmd?.limits.maxInjectedChars;
         const trimmed = clampResultsByInjectedChars(workspaceResults, budget).slice(
           0,

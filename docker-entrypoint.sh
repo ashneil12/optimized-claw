@@ -721,10 +721,21 @@ if [ "${OPENCLAW_QMD_ENABLED:-false}" = "true" ] || [ "${OPENCLAW_QMD_ENABLED:-f
   # On subsequent boots this is essentially free (sub-second).
   if command -v qmd &>/dev/null; then
     echo "[entrypoint] qmd pre-warm: triggering any first-run compilation (this may take a few minutes on first deploy)..."
-    QMD_AGENT_DATA="${OPENCLAW_STATE_DIR:-${MOLTBOT_STATE_DIR:-${CLAWDBOT_STATE_DIR:-/home/node/data}}}/agents/main/qmd"
-    QMD_XDG_CACHE="$QMD_AGENT_DATA/xdg-cache"
-    mkdir -p "$QMD_XDG_CACHE/qmd"
-    XDG_CACHE_HOME="$QMD_XDG_CACHE" qmd status 2>&1 | grep -v "cmake\|clang\|llama\|ggml\|xpack\|CXX\|C compiler\|OpenMP\|pthread\|assembler\|Detect" | head -15 || true
+    # CONFIG_DIR is already resolved at the top of the entrypoint with the correct
+    # default (/home/node/.clawdbot). Use it directly rather than re-expanding
+    # OPENCLAW_STATE_DIR here (which had a wrong /home/node/data fallback).
+    # Mirror the exact env that QmdMemoryManager sets: XDG_CACHE_HOME + QMD_CONFIG_DIR.
+    QMD_PREWARM_DIR="$CONFIG_DIR/agents/main/qmd"
+    QMD_PREWARM_CACHE="$QMD_PREWARM_DIR/xdg-cache"
+    QMD_PREWARM_CONFIG="$QMD_PREWARM_DIR/xdg-config"
+    mkdir -p "$QMD_PREWARM_CACHE/qmd" "$QMD_PREWARM_CONFIG"
+    XDG_CACHE_HOME="$QMD_PREWARM_CACHE" \
+      XDG_CONFIG_HOME="$QMD_PREWARM_CONFIG" \
+      QMD_CONFIG_DIR="$QMD_PREWARM_CONFIG" \
+      NO_COLOR=1 \
+      qmd status 2>&1 \
+      | grep -Ev "cmake|clang|llama|ggml|xpack|CXX|C compiler|OpenMP|pthread|assembler|Detect" \
+      | head -15 || true
     echo "[entrypoint] qmd pre-warm complete"
   fi
 fi

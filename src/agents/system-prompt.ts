@@ -55,9 +55,10 @@ function buildMemorySection(params: {
   ];
   if (hasWorkspaceSearch) {
     lines.push(
-      "workspace_search is also available: it searches business docs, project notes, and all other documents indexed from the workspace (business/, docs/, notes/, etc.). " +
-        "Run workspace_search for questions about business strategy, playbooks, frameworks, or project-specific knowledge. " +
-        "The two tools are complementary — memory_search covers your personal memory layer; workspace_search covers workspace documents.",
+      "workspace_search is also available: it searches all documents in the workspace — project notes, " +
+        "strategies, playbooks, frameworks, reference documents, and any other content in workspace subdirectories. " +
+        "Use it for questions about any stored knowledge or documents. " +
+        "The two tools are complementary — memory_search covers your personal episodic memory (MEMORY.md, memory/*.md); workspace_search covers all other workspace documents.",
     );
   }
   if (params.citationsMode === "off") {

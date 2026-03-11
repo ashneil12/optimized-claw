@@ -1553,32 +1553,35 @@ export class QmdMemoryManager implements MemorySearchManager {
   private warnIfWorkspaceCollectionsEmpty(): void {
     const workspaceCollections = this.qmd.collections.filter((c) => c.kind === "workspace");
     if (workspaceCollections.length === 0) {
-      return; // No workspace collections configured — not our concern here.
+      return;
     }
     try {
       const db = this.ensureDb();
-      const row = db
-        .prepare(
-          "SELECT COUNT(*) as cnt FROM documents WHERE active = 1 AND collection IN (" +
-            workspaceCollections.map(() => "?").join(",") +
-            ")",
-        )
-        .get(...workspaceCollections.map((c) => c.name)) as { cnt: number } | undefined;
-      const count = typeof row?.cnt === "number" ? row.cnt : 0;
+      const names = workspaceCollections.map((c) => c.name);
+      const paths = workspaceCollections.map((c) => c.path);
+      // Use a loop-based COUNT rather than a spread IN() query: node:sqlite's
+      // StatementSync.get() doesn't reliably accept a spread of dynamic params.
+      let count = 0;
+      for (const name of names) {
+        const row = db
+          .prepare("SELECT COUNT(*) as cnt FROM documents WHERE active = 1 AND collection = ?")
+          .get(name) as { cnt: number } | undefined;
+        count += typeof row?.cnt === "number" ? row.cnt : 0;
+      }
       if (count === 0) {
         log.warn(
-          `[memory] workspace_search WARNING: workspace collection(s) (${workspaceCollections.map((c) => c.name).join(", ")}) ` +
-            `have 0 indexed documents after boot update. workspace_search will return empty results. ` +
-            `Check that the workspace path (${workspaceCollections.map((c) => c.path).join(", ")}) exists and contains *.md files, ` +
-            `and review earlier qmd collection add log entries for errors.`,
+          `workspace_search: 0 documents indexed for collection(s) [${names.join(", ")}] ` +
+            `at path(s) [${paths.join(", ")}]. ` +
+            `workspace_search will return empty results. ` +
+            `Verify the workspace path exists with *.md files and check earlier qmd collection add entries for errors.`,
         );
       } else {
         log.info(
-          `[memory] workspace_search ready: ${count} document(s) indexed across workspace collection(s) (${workspaceCollections.map((c) => c.name).join(", ")})`,
+          `workspace_search ready — ${count} document(s) indexed in workspace collection(s) [${names.join(", ")}]`,
         );
       }
     } catch {
-      // DB may not be ready yet on the very first boot — non-fatal.
+      // DB may not be ready yet (e.g. first boot before qmd creates the index) — non-fatal.
     }
   }
 
