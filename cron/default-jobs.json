@@ -34,7 +34,7 @@
       "wakeMode": "now",
       "payload": {
         "kind": "agentTurn",
-        "message": "BROWSER TAB CLEANUP — Review and close stale tabs.\n\nSTEP 1: List all open browser tabs (action=tabs)\nSTEP 2: For each tab, decide: do you still need it?\n  - Keep tabs you're actively using or plan to return to soon\n  - Close tabs from completed tasks, old searches, or one-off lookups\n  - Close about:blank and error pages\nSTEP 3: Close stale tabs (action=close with targetId)\nSTEP 4: If no browser is running or no tabs are open, do nothing.\n\nGoal: Keep tab count minimal. Aim for 0-3 tabs at most."
+        "message": "BROWSER TAB CLEANUP — Use your browser tool to close stale tabs.\n\nYou have a built-in `browser` tool. Use it directly — do not guess about capabilities.\n\nSTEP 1: Call browser(action=\"status\") to check if browser is running.\n  - If it errors or reports browser not running: respond NO_REPLY and stop.\nSTEP 2: Call browser(action=\"tabs\") to list all open tabs.\n  - If no tabs are open: respond NO_REPLY and stop.\nSTEP 3: Review each tab — keep or close?\n  - Keep: tabs you're actively using or plan to return to soon\n  - Close: completed task tabs, old search results, about:blank, error pages\nSTEP 4: Close stale tabs with browser(action=\"close\", targetId=<id>).\n\nGoal: Keep tab count to 0-3. If browser is unavailable, respond NO_REPLY."
       },
       "delivery": {
         "mode": "none"

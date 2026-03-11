@@ -686,6 +686,13 @@ function enforceCore(configPath) {
     tools.loopDetection.enabled = true;
   }
 
+  // All agents default to the "full" tool profile — no restrictions.
+  // The "coding" profile (the previous default) blocked tools like browser,
+  // canvas, nodes, and agents_list. Full profile means the agent can use
+  // everything it is otherwise authorized for via allow/deny lists.
+  // This overwrites any stale narrower profile set during initial provisioning.
+  tools.profile = "full";
+
   deriveElevatedToolUsers(config, tools);
 
   // Workspace
@@ -775,6 +782,15 @@ function enforceCore(configPath) {
     // Remove attachOnly if it was previously set — it blocks server-side
     // sub-agent profiles from auto-connecting to their CDP containers.
     delete config.browser.attachOnly;
+
+    // Guarantee the browser tool is in the effective allowlist regardless of
+    // the tools.profile setting (e.g. "coding" profile excludes browser by
+    // default). Using alsoAllow merges additively without clobbering any
+    // existing allow/deny lists the user may have configured.
+    const toolsCfg = ensure(config, "tools");
+    const alsoAllow = new Set(toolsCfg.alsoAllow || []);
+    alsoAllow.add("browser");
+    toolsCfg.alsoAllow = [...alsoAllow];
   }
 
   writeConfig(configPath, config);
@@ -1036,7 +1052,7 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
       id: makeId(),
       name: "browser-cleanup",
       description: "Close stale browser tabs to prevent resource exhaustion",
-      enabled: true,
+      enabled: isTruthy(env("OPENCLAW_BROWSER_ENABLED", "false")),
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
       schedule: { kind: "every", everyMs: 86400000, anchorMs: nowMs }, // 24h
@@ -1045,17 +1061,20 @@ function buildCanonicalJobs(nowMs, reflectionEnabled) {
       payload: {
         kind: "agentTurn",
         message: [
-          "BROWSER TAB CLEANUP — Review and close stale tabs.",
+          "BROWSER TAB CLEANUP — Use your browser tool to close stale tabs.",
           "",
-          "STEP 1: List all open browser tabs (action=tabs)",
-          "STEP 2: For each tab, decide: do you still need it?",
-          "  - Keep tabs you're actively using or plan to return to soon",
-          "  - Close tabs from completed tasks, old searches, or one-off lookups",
-          "  - Close about:blank and error pages",
-          "STEP 3: Close stale tabs (action=close with targetId)",
-          "STEP 4: If no browser is running or no tabs are open, do nothing.",
+          "You have a built-in `browser` tool. Use it directly — do not guess about capabilities.",
           "",
-          "Goal: Keep tab count minimal. Aim for 0-3 tabs at most.",
+          'STEP 1: Call browser(action="status") to check if browser is running.',
+          "  - If it errors or reports browser not running: respond NO_REPLY and stop.",
+          'STEP 2: Call browser(action="tabs") to list all open tabs.',
+          "  - If no tabs are open: respond NO_REPLY and stop.",
+          "STEP 3: Review each tab — keep or close?",
+          "  - Keep: tabs you're actively using or plan to return to soon",
+          "  - Close: completed task tabs, old search results, about:blank, error pages",
+          'STEP 4: Close stale tabs with browser(action="close", targetId=<id>).',
+          "",
+          "Goal: Keep tab count to 0-3. If browser is unavailable, respond NO_REPLY.",
         ].join("\n"),
       },
       delivery: { mode: "none" },

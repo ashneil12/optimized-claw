@@ -55,35 +55,59 @@ Optimized Claw is a better fit than stock upstream if you are:
 
 ### 🤖 Multi-Agent Architecture
 
-| Feature                      | Description                                                                                                                                                                                         |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Structured Agent Workspaces  | Each agent gets a purpose-built directory layout (`memory/`, `knowledge/`, `skills/`, `diary.md`, `open-loops.md`, `IDENTITY.md`, etc.) seeded automatically at creation — no manual setup required |
-| Per-Agent Browser Containers | Each agent gets a dedicated browser sandbox via Docker, not a shared browser                                                                                                                        |
-| Per-Agent OAuth              | Removed credential inheritance — agents use only their own OAuth tokens                                                                                                                             |
-| Autonomous Self-Improvement  | Each agent runs its own consciousness loop, self-review, deep review, and nightly innovation — standalone by default, not relying on external orchestration                                         |
-| Pre-Seeded Cron Jobs         | 10 default cron jobs (reflection, maintenance, briefings, innovation, audits) automatically seeded per agent with `MAIN_ONLY_JOBS` filtering for sub-agents                                         |
-| Browser-Only Sandbox Mode    | `browser-only` sandbox mode for agents that need browser access without full containers                                                                                                             |
-| Agent Browser Routing        | `createBrowserTool()` passes `agentId` so agents route to their own containers                                                                                                                      |
-| Per-Agent CLI Onboarding     | `--agent` and `--sync-all` flags for scoped credential setup                                                                                                                                        |
+| Feature                          | Description                                                                                                                                                                                                                                                                |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Structured Agent Workspaces      | Each agent gets a purpose-built directory layout (`memory/`, `knowledge/`, `skills/`, `diary.md`, `open-loops.md`, `IDENTITY.md`, etc.) seeded automatically at creation — no manual setup required                                                                        |
+| **Full Tool Profile by Default** | All agents default to `tools.profile = "full"` — no arbitrary tool restrictions. The previous `"coding"` profile silently blocked browser, canvas, nodes, and agents_list. This is enforced on every gateway restart, so stale narrow profiles are automatically corrected |
+| Per-Agent Browser Containers     | Each agent gets a dedicated browser sandbox via Docker, not a shared browser                                                                                                                                                                                               |
+| Per-Agent OAuth                  | Removed credential inheritance — agents use only their own OAuth tokens                                                                                                                                                                                                    |
+| Autonomous Self-Improvement      | Each agent runs its own consciousness loop, self-review, deep review, and nightly innovation — standalone by default, not relying on external orchestration                                                                                                                |
+| Pre-Seeded Cron Jobs             | 10 default cron jobs (reflection, maintenance, briefings, innovation, audits) automatically seeded per agent with `MAIN_ONLY_JOBS` filtering for sub-agents                                                                                                                |
+| Browser-Only Sandbox Mode        | `browser-only` sandbox mode for agents that need browser access without full containers                                                                                                                                                                                    |
+| Agent Browser Routing            | `createBrowserTool()` passes `agentId` so agents route to their own containers                                                                                                                                                                                             |
+| Per-Agent CLI Onboarding         | `--agent` and `--sync-all` flags for scoped credential setup                                                                                                                                                                                                               |
 
 ### 🧠 Consciousness & Memory
 
-| Feature                                                      | Description                                                                                                                                |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 3-Tier Reflection System                                     | Self-review (12h), consciousness loop (5h default, dynamic via `NEXT_WAKE:`), deep-review (48h) — runs autonomously per agent              |
-| [Honcho](https://github.com/plastic-labs/honcho) Integration | Long-term memory baked into Docker image — auto-installed when `HONCHO_API_KEY` is set, gives agents persistent cross-session memory       |
-| Pre-Reset Memory Flush                                       | Deterministic memory flush before session reset — ensures no context is lost between compactions                                           |
-| Trajectory Compression                                       | Smarter session context carryover — preserves first/last turns verbatim, compresses middle via key decisions, tool usage, and user intents |
-| Session Search                                               | FTS5-powered keyword search across past conversations — complements embedding-based memory search                                          |
-| Session Context Carryover                                    | Rolling `memory/session-context.md` persists context across session resets                                                                 |
-| Skill Auto-Creation                                          | Agents create and manage their own skill documents autonomously in `workspace/skills/`                                                     |
-| Knowledge Base Indexer                                       | Auto-scans `memory/knowledge/*.md` and builds a queryable `_index.md`                                                                      |
-| Improvement Backlog                                          | Structured backlog system for self-generated improvement proposals with tiered triage (auto-implement / build-then-approve / propose-only) |
-| Nightly Innovation                                           | 5-phase autonomous building cron (2 AM) with backlog integration — agents build improvements overnight                                     |
-| Morning Briefing                                             | Personalized daily summary (8 AM) with backlog surfacing and correction-awareness                                                          |
-| Weekly Self-Audit                                            | 21-question strategic audit feeding the improvement backlog                                                                                |
-| Diary Archival & Continuity                                  | Automatic diary rotation with continuity summaries across archive boundaries                                                               |
-| Auto-Tidy                                                    | Scheduled workspace cleanup — prunes stale entries from MEMORY.md, open-loops, self-review, session-context, and backlog                   |
+This fork has a significantly deeper memory stack than upstream. Rather than treating each session as isolated, agents carry context forward across resets — and actively reflect on their own behavior.
+
+**How context carryover works:**
+
+1. When a session resets, `session-context-summary.ts` runs trajectory compression: the first/last turns of the conversation are preserved verbatim, and the middle is compressed into key decisions, tool usage, and user intents. This gets written to `memory/session-context.md` and is loaded automatically on the next session boot.
+2. Every session is indexed into an FTS5 SQLite database (`memory/sessions.db`) so the `session_search` tool can do fast keyword lookup across all past conversations — complementing the embedding-based `memory_search`.
+3. The 3-tier reflection system runs entirely autonomously: self-review (every 12h), consciousness loop (every 5h by default, dynamically adjustable via `NEXT_WAKE:` directives), and deep review (every 48h). These are not just prompts — they write structured entries to `memory/self-review.md`, `diary.md`, and the improvement backlog, which feed back into future heartbeats.
+
+The result: agents remember what they did, learn from their patterns, and carry their state forward even after compactions.
+
+| Feature                                                      | Description                                                                                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3-Tier Reflection System                                     | Self-review (12h), consciousness loop (5h default, dynamic via `NEXT_WAKE:`), deep-review (48h) — runs autonomously per agent                                                            |
+| [Honcho](https://github.com/plastic-labs/honcho) Integration | Long-term memory baked into Docker image — auto-installed when `HONCHO_API_KEY` is set, gives agents persistent cross-session memory                                                     |
+| Pre-Reset Memory Flush                                       | Deterministic memory flush before session reset — ensures no context is lost between compactions                                                                                         |
+| Trajectory Compression                                       | Smarter session context carryover — preserves first/last turns verbatim, compresses middle via key decisions, tool usage, and user intents                                               |
+| Session Search                                               | FTS5-powered keyword search across past conversations — complements embedding-based memory search                                                                                        |
+| Session Context Carryover                                    | Rolling `memory/session-context.md` persists context across session resets                                                                                                               |
+| QMD Always-On                                                | When `OPENCLAW_QMD_ENABLED=true`, QMD is enforced as the primary memory backend with 5-minute update intervals, boot-time sync, and hybrid vector+text search. No manual config required |
+| Skill Auto-Creation                                          | Agents create and manage their own skill documents autonomously in `workspace/skills/`                                                                                                   |
+| Knowledge Base Indexer                                       | Auto-scans `memory/knowledge/*.md` and builds a queryable `_index.md`                                                                                                                    |
+| Improvement Backlog                                          | Structured backlog system for self-generated improvement proposals with tiered triage (auto-implement / build-then-approve / propose-only)                                               |
+| Nightly Innovation                                           | 5-phase autonomous building cron (2 AM) with backlog integration — agents build improvements overnight                                                                                   |
+| Morning Briefing                                             | Personalized daily summary (8 AM) with backlog surfacing and correction-awareness                                                                                                        |
+| Weekly Self-Audit                                            | 21-question strategic audit feeding the improvement backlog                                                                                                                              |
+| Diary Archival & Continuity                                  | Automatic diary rotation with continuity summaries across archive boundaries                                                                                                             |
+| Auto-Tidy                                                    | Scheduled workspace cleanup — prunes stale entries from MEMORY.md, open-loops, self-review, session-context, and backlog                                                                 |
+
+### 💾 Backup & Restore
+
+A full lifecycle backup system runs on a configurable schedule (default: every 12 hours):
+
+1. **Create** — `openclaw backup create` produces a verified `.tar.gz` archive containing config, state, credentials, and workspace
+2. **Verify** — archive integrity is checked before upload. If corrupt, the cycle retries (up to 3 attempts) before alerting
+3. **Upload** — verified archive is stored in Supabase Storage (`openclaw-backups` bucket) with a 7-day expiry
+4. **Local copy** — a local copy is saved to `~/.clawdbot/local-backups/` (configurable via `MOLTBOT_LOCAL_BACKUP_DIR`), retained for 14 days
+5. **Alert on failure** — if all attempts fail, the dashboard is notified via the `/alert` endpoint
+
+Restores are one-click from the dashboard, or import any `.tar.gz` from a community self-hosted instance to migrate to managed hosting.
 
 ### 🐳 Docker & Deployment
 
@@ -108,12 +132,13 @@ Optimized Claw is a better fit than stock upstream if you are:
 
 ### ⚡ Performance & Reliability
 
-| Feature                | Description                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| Telegram Media Timeout | 15s timeout on media downloads prevents hung downloads from blocking groups             |
-| Typing TTL Callback    | "⏳ Still thinking" feedback when LLM runs exceed the typing indicator TTL              |
-| Heartbeat Tuning       | Default interval changed from 30m to 1h to reduce unnecessary wakeups                   |
-| General Fixes          | Ongoing bug fixes, reliability improvements, and edge-case handling across the codebase |
+| Feature                | Description                                                                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Telegram Media Timeout | 15s timeout on media downloads prevents hung downloads from blocking groups                                                                              |
+| Typing TTL Callback    | "⏳ Still thinking" feedback when LLM runs exceed the typing indicator TTL                                                                               |
+| Heartbeat Tuning       | Default interval changed from 30m to 1h to reduce unnecessary wakeups                                                                                    |
+| Exec Approval UX       | Long commands (e.g. multi-line heredocs) are height-capped and scrollable in the approval modal — buttons are always reachable within the timeout window |
+| General Fixes          | Ongoing bug fixes, reliability improvements, and edge-case handling across the codebase                                                                  |
 
 ### 🛠️ Agent Identity & Tooling
 
@@ -125,6 +150,7 @@ Optimized Claw is a better fit than stock upstream if you are:
 | SQL Tools                  | `sql_query` (read-only memory index) + `sql_execute` (read-write workspace databases)                                                                                           |
 | Session Search Tool        | Agent-facing FTS5 search across past conversations                                                                                                                              |
 | Skill Management Tool      | Autonomous skill CRUD with safety boundaries and human-authored protection                                                                                                      |
+| Workspace Search Tool      | `workspace_search` — searches only workspace-kind QMD collections, distinct from personal `memory_search` (business mode + QMD required)                                        |
 
 ---
 
@@ -211,7 +237,10 @@ The runtime and config paths stay `openclaw` / `~/.openclaw`, so your existing c
 
 ### Existing Docker Deployment
 
-Update your image references to:
+> [!WARNING]
+> **Do not pull the official `openclawai/openclaw` image to update.** That is the upstream image — it does not include any of the patches in this fork. Pulling it will silently revert your full-profile enforcement, browser tool wiring, memory stack, and every other customisation described in this README.
+
+Update your image references to this fork's images:
 
 - `ghcr.io/ashneil12/optimized-claw:main`
 - `ghcr.io/ashneil12/optimized-claw-browser:main`
@@ -235,7 +264,39 @@ To move to this fork, reinstall via:
 
 ---
 
-## Staying in Sync with Upstream
+## Keeping Optimized Claw Up to Date
+
+> [!CAUTION]
+> **Do NOT update through the official OpenClaw update mechanism (`openclaw update`, `npm update openclaw`, or pulling the upstream Docker image).** Because the source code in this fork has diverged significantly from upstream — different `enforce-config.mjs`, patched Docker entrypoint, custom tool wiring, modified CDP helpers, and more — running an upstream update will revert most of those changes. You will likely end up with broken browser containers, agents locked to a narrow tool profile, missing backup scripts, and a non-functional memory stack. It is not a simple undo.
+
+### The Correct Update Path
+
+When upstream OpenClaw releases a new version:
+
+1. **Wait** — Optimized Claw typically updates within **24–48 hours** of each upstream release. The update is tested to ensure all the fork-specific features continue to work before it's published.
+2. **Pull this fork's images** (Docker) or merge from this fork's `main` branch (source checkout). Do **not** merge directly from `openclaw/openclaw` unless you know what you're doing and have read `OPENCLAW_CONTEXT.md` front to back.
+3. **Verify the patches survived** using the commands below.
+
+If you use Docker (the recommended path), updating is just:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The fork image already has everything tested and rebased.
+
+### If You Have Your Own Local Changes
+
+If you've made additional modifications on top of Optimized Claw, make sure they're documented **before** you pull any update:
+
+- Write down which files you changed and why — even a quick comment at the top of the file is enough
+- Check `OPENCLAW_CONTEXT.md` to see if your change touches a file that's already patched; if so, note what you added so you can re-apply it after updating
+- Consider keeping a `LOCAL_CHANGES.md` in your checkout as a personal diff log
+
+Updates that aren't documented are almost always lost. A 3-line note written before updating saves hours of debugging after.
+
+### Upstream Sync Reference (for fork maintainers)
 
 Optimized Claw tracks `openclaw/openclaw` main branch. Custom patches are documented in:
 
@@ -243,13 +304,13 @@ Optimized Claw tracks `openclaw/openclaw` main branch. Custom patches are docume
 - **[OPENCLAW_CONTEXT.md](OPENCLAW_CONTEXT.md)** — Complete modification inventory with post-sync checklist
 - **[OPENCLAW_CHANGELOG.md](OPENCLAW_CHANGELOG.md)** — Full history of every custom change with rationale
 
-After every upstream sync:
+After every upstream sync, verify all patches survived:
 
 ```bash
-# Quick verification that all patches survived
 grep -c 'httpRequestWithHostOverride' src/browser/cdp.helpers.ts  # expect ≥ 1
 grep -c 'Promise.all' src/browser/server-context.ts               # expect ≥ 1
 grep -c 'agentId.*resolveSessionAgentId' src/agents/openclaw-tools.ts  # expect ≥ 1
+grep -c 'tools.profile = "full"' enforce-config.mjs              # expect ≥ 1
 ```
 
 ---
@@ -268,19 +329,25 @@ Fork-specific additions are documented in `OPENCLAW_CONTEXT.md`.
 
 These environment variables control features unique to Optimized Claw. Set them in your `docker-compose.yml` or shell environment:
 
-| Variable                         | Default | Description                                                                                                                                                                            |
-| -------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPENCLAW_BUSINESS_MODE_ENABLED` | `0`     | Enable Business Mode — transforms the agent into a strategic business partner with a 22KB guide and 64 knowledge documents across strategy, content, copywriting, operations, and more |
-| `HONCHO_API_KEY`                 | —       | Your [Honcho](https://github.com/plastic-labs/honcho) API key. When set, the Honcho memory plugin is auto-installed, giving agents persistent cross-session long-term memory           |
-| `OPENCLAW_HUMAN_MODE_ENABLED`    | `0`     | Enable human voice mode — makes agent communication more natural and conversational                                                                                                    |
+| Variable                         | Default                     | Description                                                                                                                                                                            |
+| -------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCLAW_QMD_ENABLED`           | `0`                         | Enable QMD as the primary memory backend (enforced on every restart). When enabled, sets hybrid vector+text search, 5m update intervals, and boot-time sync                            |
+| `OPENCLAW_BUSINESS_MODE_ENABLED` | `0`                         | Enable Business Mode — transforms the agent into a strategic business partner with a 22KB guide and 64 knowledge documents across strategy, content, copywriting, operations, and more |
+| `HONCHO_API_KEY`                 | —                           | Your [Honcho](https://github.com/plastic-labs/honcho) API key. When set, the Honcho memory plugin is auto-installed, giving agents persistent cross-session long-term memory           |
+| `OPENCLAW_HUMAN_MODE_ENABLED`    | `0`                         | Enable human voice mode — makes agent communication more natural and conversational                                                                                                    |
+| `OPENCLAW_BROWSER_ENABLED`       | `0`                         | Enable per-agent browser containers. When set, `browser` is added to every agent's effective tool allowlist regardless of profile                                                      |
+| `MOLTBOT_BACKUP_ENABLED`         | —                           | Set to `true` to enable scheduled automatic backups. Requires `MOLTBOT_SUPABASE_URL`, `MOLTBOT_SUPABASE_SERVICE_ROLE_KEY`, and `MOLTBOT_INSTANCE_ID`                                   |
+| `MOLTBOT_LOCAL_BACKUP_DIR`       | `~/.clawdbot/local-backups` | Local directory for 14-day backup retention alongside cloud copies                                                                                                                     |
 
 ---
 
-## Credits
+## Credits & Attribution
 
 Optimized Claw is built on top of [OpenClaw](https://github.com/openclaw/openclaw) by Peter Steinberger and the OpenClaw community. All upstream contributors are recognized.
 
-Many improvements in this fork were inspired by ideas and techniques shared across the AI agent community on Twitter/X. If you recognize a contribution that hasn't been credited, please reach out via [@ashneil12](https://twitter.com/ashneil12) and appropriate attribution will be added.
+Many improvements in this fork were drawn from ideas, techniques, and prior work shared across the AI agent community — on Twitter/X, GitHub, Discord servers, and elsewhere. I didn't always keep track of the original sources while iterating quickly, so not everything has a traceable attribution link.
+
+**If you recognize a pattern, technique, or feature in this fork that originated in your repo or your work, please reach out.** I'm happy to add proper credit and a link. Email [info@openclawservers.com](mailto:info@openclawservers.com) and I'll get it sorted.
 
 - [OpenClaw](https://github.com/openclaw/openclaw) — upstream project
 - [OpenClaw Docs](https://docs.openclaw.ai) — documentation (applies to this fork)
