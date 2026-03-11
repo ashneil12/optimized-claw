@@ -214,6 +214,30 @@ Published images:
 - `ghcr.io/ashneil12/optimized-claw:main`
 - `ghcr.io/ashneil12/optimized-claw-browser:main`
 
+### Browser Containers (Self-Hosted)
+
+Browser containers are **opt-in, not automatic**. The main server container doesn't spin up browser containers for you — you need to define them explicitly and wire them up.
+
+**How it works:**
+
+1. The `optimized-claw-browser` image runs Playwright/Chrome with a CDP endpoint
+2. Each agent is assigned a browser endpoint URL in config — `enforce-config.mjs` handles the profile assignment on each restart
+3. You control scaling: one shared container works fine for small teams; for full per-agent isolation, run one browser container per agent
+
+**To wire it up**, paste this prompt into any AI coding agent (Antigravity, Claude Code, Cursor, etc.):
+
+```
+I'm self-hosting Optimized Claw. My project has a docker-compose.yml.
+Please:
+1. Add a `browser` service using the image ghcr.io/ashneil12/optimized-claw-browser:main
+   with the correct ports (9222 for CDP) and a named volume for browser data
+2. Add OPENCLAW_BROWSER_ENABLED=1 and BROWSER_ENDPOINT_URL=http://browser:9222
+   to the main server service's environment
+3. Add `depends_on: [browser]` to the main server service so the browser
+   starts first
+4. Update .env.example with the new vars and comments explaining them
+```
+
 ---
 
 ## Upgrading from an Existing OpenClaw Setup
