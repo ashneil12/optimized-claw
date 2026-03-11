@@ -135,6 +135,7 @@ COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 COPY --from=runtime-assets --chown=node:node /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=runtime-assets --chown=node:node /app/scripts ./scripts
 COPY --from=runtime-assets --chown=node:node /app/enforce-config.mjs ./enforce-config.mjs
 COPY --from=runtime-assets --chown=node:node /app/SOUL.md ./SOUL.md
 COPY --from=runtime-assets --chown=node:node /app/ACIP_SECURITY.md ./ACIP_SECURITY.md
@@ -260,8 +261,9 @@ RUN git clone --depth=1 --branch v2.0.1 https://github.com/tobi/qmd.git /opt/qmd
 
 ENV NODE_ENV=production
 
-# Make our custom entrypoint executable
-RUN chmod +x /app/docker-entrypoint.sh
+# Make our custom entrypoint and scripts executable
+RUN chmod +x /app/docker-entrypoint.sh \
+  && find /app/scripts -type f -name '*.sh' -exec chmod +x {} +
 
 # Pre-bake Honcho memory plugin into the image (patched fork).
 # Uses github:ashneil12/openclaw-honcho-multiagent instead of vanilla npm,
