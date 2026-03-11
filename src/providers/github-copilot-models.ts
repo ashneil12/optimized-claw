@@ -24,13 +24,18 @@ const DEFAULT_MODEL_IDS = [
   "o3",
   "o3-mini",
   "o4-mini",
-  // Anthropic (short-form IDs used by GitHub Copilot API)
-  "claude-haiku-4-5",
-  "claude-sonnet-4-5",
+  // Anthropic — GitHub Copilot uses dot notation (e.g. claude-haiku-4.5)
+  // Dash aliases kept for forward-compat with existing agent configs
+  "claude-haiku-4.5",
+  "claude-haiku-4-5", // alias: same model, dash form used by some configs
   "claude-sonnet-4.5",
+  "claude-sonnet-4-5", // alias
   "claude-sonnet-4.6",
-  "claude-opus-4-5",
-  "claude-opus-4-6",
+  "claude-sonnet-4-6", // alias
+  "claude-opus-4.5",
+  "claude-opus-4-5", // alias
+  "claude-opus-4.6",
+  "claude-opus-4-6", // alias
   // Google
   "gemini-2.5-pro",
   "gemini-3-flash",
