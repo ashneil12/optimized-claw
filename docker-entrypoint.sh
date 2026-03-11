@@ -714,6 +714,19 @@ if [ "${OPENCLAW_QMD_ENABLED:-false}" = "true" ] || [ "${OPENCLAW_QMD_ENABLED:-f
       echo "[entrypoint] WARNING: bun not found — cannot install qmd. Memory search will fall back to builtin."
     fi
   fi
+
+  # PRE-WARM: run 'qmd status' to trigger any first-run llama.cpp compilation
+  # BEFORE the gateway starts. This ensures the qmd binary is fully compiled
+  # so that OpenClaw's ensureCollections() calls succeed without timing out.
+  # On subsequent boots this is essentially free (sub-second).
+  if command -v qmd &>/dev/null; then
+    echo "[entrypoint] qmd pre-warm: triggering any first-run compilation (this may take a few minutes on first deploy)..."
+    QMD_AGENT_DATA="${OPENCLAW_STATE_DIR:-${MOLTBOT_STATE_DIR:-${CLAWDBOT_STATE_DIR:-/home/node/data}}}/agents/main/qmd"
+    QMD_XDG_CACHE="$QMD_AGENT_DATA/xdg-cache"
+    mkdir -p "$QMD_XDG_CACHE/qmd"
+    XDG_CACHE_HOME="$QMD_XDG_CACHE" qmd status 2>&1 | grep -v "cmake\|clang\|llama\|ggml\|xpack\|CXX\|C compiler\|OpenMP\|pthread\|assembler\|Detect" | head -15 || true
+    echo "[entrypoint] qmd pre-warm complete"
+  fi
 fi
 
 # =============================================================================

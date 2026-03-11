@@ -257,7 +257,13 @@ export class QmdMemoryManager implements MemorySearchManager {
     await this.ensureCollections();
 
     if (this.qmd.update.onBoot) {
-      const bootRun = this.runUpdate("boot", true);
+      const bootRun = this.runUpdate("boot", true).then(() => {
+        // Post-boot health check: warn prominently if workspace-kind collections
+        // show zero indexed documents. This usually means the collection path is
+        // wrong or addCollection timed out during this boot — the operator
+        // should check logs for earlier qmd-related warnings.
+        this.warnIfWorkspaceCollectionsEmpty();
+      });
       if (this.qmd.update.waitForBootSync) {
         await bootRun.catch((err) => {
           log.warn(`qmd boot update failed: ${String(err)}`);
@@ -317,7 +323,7 @@ export class QmdMemoryManager implements MemorySearchManager {
       }
       try {
         await this.ensureCollectionPath(collection);
-        await this.addCollection(collection.path, collection.name, collection.pattern);
+        await this.addCollectionWithRetry(collection.path, collection.name, collection.pattern);
         existing.set(collection.name, {
           path: collection.path,
           pattern: collection.pattern,
@@ -534,6 +540,32 @@ export class QmdMemoryManager implements MemorySearchManager {
     await this.runQmd(["collection", "add", pathArg, "--name", name, "--mask", pattern], {
       timeoutMs: this.qmd.update.commandTimeoutMs,
     });
+  }
+
+  /**
+   * Adds a QMD collection with one automatic retry on failure.
+   *
+   * On fresh containers the first qmd invocation may trigger llama.cpp
+   * compilation which can take 60–90 s.  If the add times out we wait briefly
+   * and retry once, giving the binary time to finish compiling so the
+   * subsequent call succeeds within the same timeout window.
+   */
+  private async addCollectionWithRetry(
+    pathArg: string,
+    name: string,
+    pattern: string,
+  ): Promise<void> {
+    try {
+      await this.addCollection(pathArg, name, pattern);
+    } catch (firstErr) {
+      const firstMessage = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      log.warn(
+        `qmd collection add failed for ${name} (first attempt): ${firstMessage}; retrying in 5 s`,
+      );
+      await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
+      // Second attempt — let the caller handle any error from this attempt.
+      await this.addCollection(pathArg, name, pattern);
+    }
   }
 
   private async removeCollection(name: string): Promise<void> {
@@ -1509,6 +1541,45 @@ export class QmdMemoryManager implements MemorySearchManager {
       candidate = `${base}-${counter}`;
     }
     return candidate;
+  }
+
+  /**
+   * After the boot update completes, check whether any workspace-kind
+   * collections actually have indexed documents.  Zero documents typically
+   * means the collection path is wrong or addCollection failed — surface a
+   * prominent warning so operators can act on it rather than silently getting
+   * empty workspace_search results forever.
+   */
+  private warnIfWorkspaceCollectionsEmpty(): void {
+    const workspaceCollections = this.qmd.collections.filter((c) => c.kind === "workspace");
+    if (workspaceCollections.length === 0) {
+      return; // No workspace collections configured — not our concern here.
+    }
+    try {
+      const db = this.ensureDb();
+      const row = db
+        .prepare(
+          "SELECT COUNT(*) as cnt FROM documents WHERE active = 1 AND collection IN (" +
+            workspaceCollections.map(() => "?").join(",") +
+            ")",
+        )
+        .get(...workspaceCollections.map((c) => c.name)) as { cnt: number } | undefined;
+      const count = typeof row?.cnt === "number" ? row.cnt : 0;
+      if (count === 0) {
+        log.warn(
+          `[memory] workspace_search WARNING: workspace collection(s) (${workspaceCollections.map((c) => c.name).join(", ")}) ` +
+            `have 0 indexed documents after boot update. workspace_search will return empty results. ` +
+            `Check that the workspace path (${workspaceCollections.map((c) => c.path).join(", ")}) exists and contains *.md files, ` +
+            `and review earlier qmd collection add log entries for errors.`,
+        );
+      } else {
+        log.info(
+          `[memory] workspace_search ready: ${count} document(s) indexed across workspace collection(s) (${workspaceCollections.map((c) => c.name).join(", ")})`,
+        );
+      }
+    } catch {
+      // DB may not be ready yet on the very first boot — non-fatal.
+    }
   }
 
   private sanitizeCollectionNameSegment(input: string): string {

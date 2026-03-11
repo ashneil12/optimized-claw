@@ -78,7 +78,11 @@ const DEFAULT_QMD_TIMEOUT_MS = 4_000;
 // Prefer a faster mode for interactive use; users can opt into `query` for best recall.
 const DEFAULT_QMD_SEARCH_MODE: MemoryQmdSearchMode = "search";
 const DEFAULT_QMD_EMBED_INTERVAL = "60m";
-const DEFAULT_QMD_COMMAND_TIMEOUT_MS = 30_000;
+// 120 s — raised from 30 s to handle first-run llama.cpp compilation on fresh
+// containers (no prebuilt GGML binary). Without this, `qmd collection add`
+// times out before the build completes, silently leaving zero collections
+// registered and workspace_search permanently broken for that boot.
+const DEFAULT_QMD_COMMAND_TIMEOUT_MS = 120_000;
 const DEFAULT_QMD_UPDATE_TIMEOUT_MS = 120_000;
 const DEFAULT_QMD_EMBED_TIMEOUT_MS = 120_000;
 const DEFAULT_QMD_LIMITS: ResolvedQmdLimitsConfig = {
