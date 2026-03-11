@@ -6,7 +6,10 @@ import { logConfigUpdated } from "../config/logging.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { stylePromptTitle } from "../terminal/prompt-style.js";
 
-const CLIENT_ID = "Iv1.b507a08c87ecfe98";
+// GitHub CLI client ID — approved by GitHub for Copilot API access.
+// The OpenClaw app ID (Iv1.b507a08c87ecfe98) was blocked by GitHub:
+//   "Please only use approved clients for Copilot."
+const CLIENT_ID = "178c6fc778ccc68e1d6a";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
@@ -138,7 +141,7 @@ export async function githubCopilotLoginCommand(
 
   const spin = spinner();
   spin.start("Requesting device code from GitHub...");
-  const device = await requestDeviceCode({ scope: "read:user" });
+  const device = await requestDeviceCode({ scope: "read:user read:org" });
   spin.stop("Device code ready");
 
   note(
