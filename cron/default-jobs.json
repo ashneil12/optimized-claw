@@ -203,6 +203,25 @@
       "delivery": {
         "mode": "none"
       }
+    },
+    {
+      "id": "workspace-doc-converter",
+      "name": "Maintenance: Workspace Doc Converter",
+      "description": "On-demand trigger for the workspace document converter — converts PDF, TXT, DOCX, ODT, CSV, EPUB files in the workspace to markdown for QMD indexing. The converter also runs automatically as a background sidecar every 5 minutes; this cron job is for forced passes or manual triggers.",
+      "enabled": false,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "WORKSPACE DOC CONVERTER — Run a forced conversion pass on the workspace.\n\nThe background converter already runs every 5 minutes automatically. This job triggers an immediate forced pass, useful after dropping a batch of new documents.\n\nSTEP 1: Run the converter script:\n  exec: bash /app/scripts/workspace-doc-converter.sh --once --force\n\nSTEP 2: Check the converter log for results:\n  Read workspace/converter-log/converter.log (last 20 lines).\n\nSTEP 3: Report converted files count. If nothing was converted, respond HEARTBEAT_OK."
+      },
+      "delivery": {
+        "mode": "none"
+      }
     }
   ]
 }

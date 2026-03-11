@@ -831,6 +831,28 @@ if [ -d "$CONFIG_DIR/extensions" ]; then
 fi
 
 
+# =============================================================================
+# WORKSPACE DOC CONVERTER: Background service that watches the workspace for
+# non-markdown files (PDF, TXT, DOCX, ODT, CSV, EPUB) and auto-converts them
+# to markdown so that QMD can index them alongside existing .md files.
+#
+# Runs on a 5-minute poll interval. Completely deterministic — no LLM involved.
+# Set OPENCLAW_DOC_CONVERTER_ENABLED=false to disable.
+# =============================================================================
+DOC_CONVERTER_ENABLED="${OPENCLAW_DOC_CONVERTER_ENABLED:-true}"
+DOC_CONVERTER_SCRIPT="/app/scripts/workspace-doc-converter.sh"
+
+if [ "$DOC_CONVERTER_ENABLED" != "false" ] && [ "$DOC_CONVERTER_ENABLED" != "0" ]; then
+  if [ -f "$DOC_CONVERTER_SCRIPT" ]; then
+    bash "$DOC_CONVERTER_SCRIPT" \
+      --interval 300 \
+      >> "${WORKSPACE_DIR}/converter-log/converter.log" 2>&1 &
+    echo "[entrypoint] workspace-doc-converter started (poll interval: 5m, PID: $!)"
+  else
+    echo "[entrypoint] WARNING: workspace-doc-converter.sh not found at $DOC_CONVERTER_SCRIPT — skipping"
+  fi
+fi
+
 # Execute the main command as root — no privilege drop.
 # The agent already had passwordless sudo, so dropping to node was security theater.
 # Running as root eliminates permission issues (npm global installs, file ownership)
