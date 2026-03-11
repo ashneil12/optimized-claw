@@ -31,16 +31,6 @@ function resolveWorkspaceToolContext(options: {
   if (!resolveMemorySearchConfig(cfg, agentId)) {
     return null;
   }
-  // workspace_search is only available when business mode is active.
-  // Supports both OPENCLAW_BUSINESS_MODE=1 and OPENCLAW_BUSINESS_MODE_ENABLED=true
-  // (matching the pattern in workspace.ts).
-  const shortFlag = process.env.OPENCLAW_BUSINESS_MODE?.trim();
-  const longFlag = process.env.OPENCLAW_BUSINESS_MODE_ENABLED?.trim();
-  const businessModeEnabled =
-    shortFlag === "1" || shortFlag === "true" || longFlag === "1" || longFlag === "true";
-  if (!businessModeEnabled) {
-    return null;
-  }
   // Also require the QMD backend (workspace collections are QMD-only).
   const resolved = resolveMemoryBackendConfig({ cfg, agentId });
   if (resolved.backend !== "qmd") {
@@ -69,10 +59,11 @@ export function createWorkspaceSearchTool(options: {
     label: "Workspace Search",
     name: "workspace_search",
     description:
-      "Search business documents, project notes, and workspace files (business/, docs/, notes/, etc.). " +
-      "Use this for business strategy, playbooks, frameworks, and project-specific knowledge. " +
-      "Complements memory_search: memory_search covers personal memory (MEMORY.md, memory/*.md); " +
-      "workspace_search covers all other documents in the workspace.",
+      "Search documents and files in the workspace (business/, docs/, notes/, memory/, and any " +
+      "other directories). Use this to find project notes, strategies, playbooks, frameworks, " +
+      "reference documents, and any content stored in workspace files. " +
+      "Complements memory_search: memory_search covers personal episodic memory (MEMORY.md, " +
+      "memory/*.md); workspace_search covers all other documents and subdirectories.",
     parameters: WorkspaceSearchSchema,
     execute: async (_toolCallId, params) => {
       const query = readStringParam(params, "query", { required: true });
