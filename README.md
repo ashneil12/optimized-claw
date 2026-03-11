@@ -142,15 +142,37 @@ Restores are one-click from the dashboard, or import any `.tar.gz` from a commun
 
 ### 🛠️ Agent Identity & Tooling
 
-| Feature                    | Description                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SOUL.md                    | Actionable identity framework — 3-tier reflection, Ouroboros ontological framing, 7 Biblical principles, Ship of Theseus protection. Not a philosophical essay — a constitution |
-| IDENTITY.md                | Per-agent identity document — relationship model, personality traits, communication preferences, CRITICAL rules promoted from self-review patterns                              |
-| System Prompt Enhancements | Architect-first thinking, stale identity nudges (72h mtime check), comprehensive tool guidance, human voice detection                                                           |
-| SQL Tools                  | `sql_query` (read-only memory index) + `sql_execute` (read-write workspace databases)                                                                                           |
-| Session Search Tool        | Agent-facing FTS5 search across past conversations                                                                                                                              |
-| Skill Management Tool      | Autonomous skill CRUD with safety boundaries and human-authored protection                                                                                                      |
-| Workspace Search Tool      | `workspace_search` — searches only workspace-kind QMD collections, distinct from personal `memory_search` (business mode + QMD required)                                        |
+| Feature                    | Description                                                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOUL.md                    | Actionable identity framework — 3-tier reflection, cyclical self-renewal ontology, 7 Biblical principles, Ship of Theseus protection. Not a philosophical essay — a constitution |
+| IDENTITY.md                | Per-agent identity document — relationship model, personality traits, communication preferences, CRITICAL rules promoted from self-review patterns                               |
+| System Prompt Enhancements | Architect-first thinking, stale identity nudges (72h mtime check), comprehensive tool guidance, human voice detection                                                            |
+| SQL Tools                  | `sql_query` (read-only memory index) + `sql_execute` (read-write workspace databases)                                                                                            |
+| Session Search Tool        | Agent-facing FTS5 search across past conversations                                                                                                                               |
+| Skill Management Tool      | Autonomous skill CRUD with safety boundaries and human-authored protection                                                                                                       |
+| Workspace Search Tool      | `workspace_search` — searches only workspace-kind QMD collections, distinct from personal `memory_search` (business mode + QMD required)                                         |
+
+> [!IMPORTANT]
+> **Migrating from another setup? Read this before copying identity files.**
+>
+> In this fork, **`SOUL.md` is intentionally left unchanged** across all agents — it acts as a shared constitutional framework (reflection tiers, core principles, identity continuity protections) and is not the place for personalisation. **Do not customise it per-agent.**
+>
+> **`IDENTITY.md` is where the agent's actual personal identity lives** — their name, personality, relationship model, communication style, and self-defined rules. If you're transferring an agent from another OpenClaw setup, port their identity into `IDENTITY.md`, not `SOUL.md`.
+
+---
+
+### 🧰 Pre-Installed Team Skills
+
+This fork ships a set of **team-level skills** available to all agents out of the box. These are seeded into each agent's workspace at creation and cover the most common operational tasks for a multi-agent team. More will be added over time.
+
+| Skill                | Description                                                                                                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create-agent`       | Full lifecycle setup for a new team member — identity, workspace, channels (Telegram/Discord), browser container, Honcho peer, cron jobs, and memory seeding. Use this when adding a new agent, not just a new channel                                  |
+| `channel-team-setup` | Configure multi-agent messaging across Telegram and Discord. Covers `openclaw.json` bindings, `groupPolicy`, `requireMention`, sandbox settings, agent-to-agent communication, and platform quirks (Telegram privacy mode, Discord bot intents, etc.)   |
+| `cron-setup`         | Create, configure, and troubleshoot custom cron jobs for any agent. Covers job templates, delivery targets, schedule types, and common failure modes. Does **not** cover the standard seeded job set — that's handled by `enforce-config.mjs cron-seed` |
+| `review-pr`          | Read-only GitHub PR analysis using the `gh` CLI — structured feedback and readiness assessment. Does not merge or push                                                                                                                                  |
+| `prepare-pr`         | Rebase a PR branch onto main, fix review findings, run gates, and push to the PR head branch. Use after review, never merges directly                                                                                                                   |
+| `merge-pr`           | Squash-merge a reviewed and prepared PR via the `gh` CLI. Cleans up worktrees after success                                                                                                                                                             |
 
 ---
 
@@ -171,6 +193,9 @@ If your workflow depends on Matrix/Element or other upstream channels, the exist
 ---
 
 ## Fresh Install
+
+> [!CAUTION]
+> **Do NOT use the official `openclawai/openclaw` image or the upstream installer** for any step below. The official image does not include any of the patches in this fork. Using it — even once, even just to bootstrap — will give you an unconfigured baseline missing multi-agent support, browser wiring, the full-tool-profile enforcement, and the entire memory stack. Use only the images and installer URLs shown below.
 
 ### Self-Hosted: macOS / Linux
 
@@ -216,15 +241,21 @@ Published images:
 
 ### Browser Containers (Self-Hosted)
 
-Browser containers are **opt-in, not automatic**. The main server container doesn't spin up browser containers for you — you need to define them explicitly and wire them up.
+Per-agent browser containers are one of the core design principles of this fork — **every agent gets their own isolated browser**, not a shared one. This is **opt-in and requires explicit setup**. The main server container does not spin up browser containers automatically.
 
 **How it works:**
 
-1. The `optimized-claw-browser` image runs Playwright/Chrome with a CDP endpoint
-2. Each agent is assigned a browser endpoint URL in config — `enforce-config.mjs` handles the profile assignment on each restart
-3. You control scaling: one shared container works fine for small teams; for full per-agent isolation, run one browser container per agent
+1. The `optimized-claw-browser` image runs Playwright/Chrome with a CDP endpoint exposed on port `9222`
+2. On every gateway restart, `enforce-config.mjs` auto-creates browser profiles in `openclaw.json` pointing each agent to their own `browser-<agentId>:9222` container — no manual config editing needed
+3. You control scaling: one shared container works for small teams; for full isolation, run one browser container per agent (the `create-agent` skill handles this automatically)
 
-**To wire it up**, paste this prompt into any AI coding agent (Antigravity, Claude Code, Cursor, etc.):
+**To enable browsers**, set the following environment variable in your `docker-compose.yml` or `.env`:
+
+```env
+OPENCLAW_BROWSER_ENABLED=1
+```
+
+Then add a browser service for each agent. Paste this prompt into any AI coding agent (Antigravity, Claude Code, Cursor, etc.) to wire it up:
 
 ```
 I'm self-hosting Optimized Claw. My project has a docker-compose.yml.
@@ -237,6 +268,9 @@ Please:
    starts first
 4. Update .env.example with the new vars and comments explaining them
 ```
+
+> [!NOTE]
+> When you add a new agent via the `create-agent` skill, a dedicated `browser-<agentId>` container is provisioned automatically on the next gateway restart — no manual steps. The browser tool is routed to that agent's container, not a shared one.
 
 ---
 
