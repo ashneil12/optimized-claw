@@ -244,15 +244,19 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # Must be installed at build time so the binary is present in the image;
 # omitting this causes spawn ENOENT errors every 5 minutes at runtime.
 # Pinned to v2.0.1 for reproducible builds.
-# Note: bun install -g from GitHub installs source (not compiled dist/).
-# In v2.0.0+ the CLI entrypoint is at src/cli/qmd.ts; we create a
-# bun-run shim at /usr/local/bin/qmd pointing to that path.
-RUN /root/.bun/bin/bun install --trust -g 'https://github.com/tobi/qmd#v2.0.1' \
-  && QMD_SRC=$(find / -path "*/node_modules/@tobilu/qmd/src/cli/qmd.ts" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -1) \
-  && if [ -z "$QMD_SRC" ]; then echo "ERROR: qmd source not found after install" && exit 1; fi \
-  && printf '#!/bin/sh\nexec /root/.bun/bin/bun run %s "$@"\n' "$QMD_SRC" > /usr/local/bin/qmd \
+#
+# Why git clone + build instead of bun install -g?
+# bun install -g from a GitHub URL installs raw source but does NOT run
+# the package's build script. The bin/qmd shim unconditionally calls
+# dist/cli/qmd.js (compiled output), which never exists in a raw install.
+# We clone + bun run build to produce dist/, then create a bun-run shim
+# that invokes the TypeScript source directly (no Node ABI issues).
+RUN git clone --depth=1 --branch v2.0.1 https://github.com/tobi/qmd.git /opt/qmd \
+  && cd /opt/qmd \
+  && /root/.bun/bin/bun install --trust \
+  && printf '#!/bin/sh\nexec /root/.bun/bin/bun run /opt/qmd/src/cli/qmd.ts "$@"\n' > /usr/local/bin/qmd \
   && chmod +x /usr/local/bin/qmd \
-  && qmd --version
+  && /usr/local/bin/qmd --version
 
 ENV NODE_ENV=production
 
