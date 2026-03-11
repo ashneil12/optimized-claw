@@ -18,7 +18,10 @@ You MUST read ALL of the following files using the `read` tool, every single hea
 
 - [ ] Any scheduled tasks or reminders due?
 - [ ] Any errors or failures since last check?
-- [ ] Any urgent items in WORKING.md (open loops)?
+- [ ] **WORKING.md enforcement** (mandatory every heartbeat):
+  - Mark any finished tasks `[x]` — do not leave completed work as `[ ]`
+  - Verify every open loop has `— added YYYY-MM-DD`; add the date if missing
+  - Close or escalate any loop you can resolve right now
 - [ ] Any background tasks completed? Summarize results if needed.
 
 ## Situational Awareness (Every Heartbeat)
@@ -51,4 +54,4 @@ If the same MISS appears 3+ times, promote it to a CRITICAL rule in IDENTITY.md.
 
 ---
 
-Last reviewed: 2026-02-17
+Last reviewed: 2026-03-11

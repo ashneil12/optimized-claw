@@ -18,8 +18,26 @@
 
 import fs from "node:fs";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { cleanUserContent, isMeaningfulUserContent } from "./noise-patterns.js";
 
 const log = createSubsystemLogger("trajectory-compressor");
+
+// ---------------------------------------------------------------------------
+// Noise filtering — strip system-injected lines from user message content
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the parsed turns contain at least one user turn with real
+ * human-written content (after noise stripping).
+ *
+ * This is a signal-based check: heartbeat sessions, cron jobs, and consciousness
+ * loops produce turns where every user message is either empty, a system
+ * injection, or a bare `HEARTBEAT_OK`. Those sessions should not be recorded
+ * in session-context.md at all.
+ */
+function hasRealHumanInteraction(turns: ParsedTurn[]): boolean {
+  return turns.some((turn) => turn.role === "user" && isMeaningfulUserContent(turn.content));
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +170,14 @@ function parseTranscript(transcriptPath: string): ParsedTurn[] {
     }
 
     const msg = entry.message;
-    const text = extractText(msg.content).trim();
+    let text = extractText(msg.content).trim();
+
+    // Strip known system-injected noise from user messages at parse time.
+    // This keeps all downstream consumers (intents, protected turns, etc.) clean.
+    if (msg.role === "user") {
+      text = cleanUserContent(text);
+    }
+
     const toolCall = msg.role === "assistant" ? extractToolCall(msg.content) : undefined;
     const isToolResult = msg.role === "tool" || Boolean(msg.tool_call_id);
 
@@ -241,6 +266,13 @@ function buildMechanicalSummary(turns: ParsedTurn[], config: CompressionConfig):
   const { maxOutputChars, protectFirstTurns, protectLastTurns, maxMessageChars } = config;
 
   if (turns.length === 0) {
+    return "";
+  }
+
+  // Skip sessions that contain no real human interaction — heartbeats, cron
+  // runs, consciousness loops, etc. These should never appear in session-context.md.
+  if (!hasRealHumanInteraction(turns)) {
+    log.debug("skipping session summary: no real human interaction detected");
     return "";
   }
 

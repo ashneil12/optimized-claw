@@ -396,4 +396,116 @@ describe("trajectory-compressor", () => {
       }
     });
   });
+
+  describe("noise filtering", () => {
+    it("strips 'Sender (untrusted metadata):' lines from user intents", async () => {
+      const senderNoise = [
+        "Sender (untrusted metadata):",
+        '{"label":"openclaw-control-ui","id":"openclaw-control-ui"}',
+      ].join("\n");
+
+      const transcript = writeTranscript([
+        buildTranscriptLine("user", senderNoise),
+        buildTranscriptLine("assistant", "I can help with that."),
+        buildTranscriptLine("user", [senderNoise, "yo fix the cron job"].join("\n")),
+        buildTranscriptLine("assistant", "On it."),
+      ]);
+      try {
+        const result = await compressTrajectory({ transcriptPath: transcript });
+        // Real user message should be in the summary
+        expect(result.summary).toContain("yo fix the cron job");
+        // Noise labels must not appear
+        expect(result.summary).not.toContain("Sender (untrusted metadata)");
+        expect(result.summary).not.toContain("openclaw-control-ui");
+      } finally {
+        cleanupTranscript(transcript);
+      }
+    });
+
+    it("strips [SYSTEM: BOOTSTRAP.md ...] injections from user messages", async () => {
+      const bootstrapNoise =
+        "[SYSTEM: BOOTSTRAP.md is present — this is a first-run workspace. You MUST follow the bootstrap protocol as your FIRST action.]";
+
+      const transcript = writeTranscript([
+        buildTranscriptLine("user", bootstrapNoise),
+        buildTranscriptLine("assistant", "Bootstrap complete."),
+        buildTranscriptLine("user", "Hey, I want to set up Telegram"),
+        buildTranscriptLine("assistant", "Sure, let's do it."),
+      ]);
+      try {
+        const result = await compressTrajectory({ transcriptPath: transcript });
+        expect(result.summary).toContain("I want to set up Telegram");
+        expect(result.summary).not.toContain("BOOTSTRAP.md is present");
+        expect(result.summary).not.toContain("[SYSTEM:");
+      } finally {
+        cleanupTranscript(transcript);
+      }
+    });
+
+    it("returns empty summary for heartbeat-only sessions (no real human interaction)", async () => {
+      // Simulate a cron-triggered heartbeat session: all user turns are system injections
+      const heartbeatPrompt = [
+        "Sender (untrusted metadata):",
+        '{"label":"openclaw-control-ui","id":"openclaw-control-ui"}',
+        "[SYSTEM: Heartbeat triggered by cron]",
+      ].join("\n");
+
+      const transcript = writeTranscript([
+        buildTranscriptLine("user", heartbeatPrompt),
+        buildTranscriptLine("assistant", "HEARTBEAT_OK"),
+        buildTranscriptLine("user", heartbeatPrompt),
+        buildTranscriptLine("assistant", "HEARTBEAT_OK"),
+      ]);
+      try {
+        const result = await compressTrajectory({ transcriptPath: transcript });
+        // No real human interaction → must not write any summary
+        expect(result.summary).toBe("");
+      } finally {
+        cleanupTranscript(transcript);
+      }
+    });
+
+    it("preserves real user messages when mixed with metadata noise", async () => {
+      const senderNoise = 'Sender (untrusted metadata):\n{"label":"openclaw-control-ui"}';
+
+      const transcript = writeTranscript([
+        // Noise-only turn (cron/heartbeat context injection)
+        buildTranscriptLine("user", senderNoise),
+        buildTranscriptLine("assistant", "HEARTBEAT_OK"),
+        // Real human turn mixed with noise
+        buildTranscriptLine("user", [senderNoise, "can you check the deploy logs?"].join("\n")),
+        buildTranscriptLine("assistant", "Looking at the logs now."),
+        buildTranscriptLine("user", "any errors?"),
+        buildTranscriptLine("assistant", "Found one error in the nginx config."),
+      ]);
+      try {
+        const result = await compressTrajectory({ transcriptPath: transcript });
+        // Real messages present → summary should be non-empty
+        expect(result.summary.length).toBeGreaterThan(0);
+        expect(result.summary).toContain("can you check the deploy logs");
+        expect(result.summary).toContain("any errors");
+        // Noise must not appear
+        expect(result.summary).not.toContain("Sender (untrusted metadata)");
+        expect(result.summary).not.toContain("openclaw-control-ui");
+      } finally {
+        cleanupTranscript(transcript);
+      }
+    });
+
+    it("strips bare HEARTBEAT_OK lines from user messages", async () => {
+      const transcript = writeTranscript([
+        buildTranscriptLine("user", "HEARTBEAT_OK"),
+        buildTranscriptLine("assistant", "Noted."),
+        buildTranscriptLine("user", "what time is it?"),
+        buildTranscriptLine("assistant", "It's 10am UTC."),
+      ]);
+      try {
+        const result = await compressTrajectory({ transcriptPath: transcript });
+        expect(result.summary).toContain("what time is it");
+        expect(result.summary).not.toContain("HEARTBEAT_OK");
+      } finally {
+        cleanupTranscript(transcript);
+      }
+    });
+  });
 });

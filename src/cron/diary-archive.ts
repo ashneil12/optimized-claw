@@ -50,6 +50,26 @@ const ARCHIVE_STATE_FILENAME = ".diary-archive-state.json";
 const DOWNLOADS_PRUNE_AFTER_MS = 10 * 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
+// WORKING.md pruning constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Open loops older than this are considered stale and removed from WORKING.md.
+ * 7 days matches the existing instruction in the WORKING.md template.
+ */
+export const WORKING_STALE_LOOP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Daily dated memory log files (memory/YYYY-MM-DD.md) older than this are
+ * deleted.  Important content should already be distilled into MEMORY.md /
+ * self-review.md long before this threshold is reached.
+ */
+export const DAILY_MEMORY_LOG_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** Regex that matches a dated daily memory log filename. */
+const DAILY_LOG_FILENAME_RE = /^\d{4}-\d{2}-\d{2}\.md$/;
+
+// ---------------------------------------------------------------------------
 // Size-triggered pruning constants
 // ---------------------------------------------------------------------------
 
@@ -771,6 +791,180 @@ export function buildNewDiary(template: string, archiveRef: string, excerpt: str
 }
 
 // ---------------------------------------------------------------------------
+// WORKING.md pruning
+// ---------------------------------------------------------------------------
+
+export type WorkingMdPruneResult = {
+  /** Whether any stale open loops were removed. */
+  staleLoopsRemoved: number;
+  /** Whether any completed task lines were archived to the day log. */
+  completedTasksArchived: number;
+};
+
+/**
+ * Prune WORKING.md by:
+ * 1. Removing open-loop checklist items (`- [ ] ...`) that carry an "added
+ *    DATE" annotation older than `staleAgeMs` (default 7 days).
+ * 2. Moving completed checklist items (`- [x] ...`) to today's dated memory
+ *    log so WORKING.md stays focused on active state only.
+ *
+ * Both operations are best-effort and atomic (write-then-rename).
+ * Skipped if WORKING.md doesn't exist or contains only template placeholders.
+ */
+export async function pruneWorkingMd(
+  workspaceDir: string,
+  nowMs: number = Date.now(),
+  staleAgeMs: number = WORKING_STALE_LOOP_MAX_AGE_MS,
+): Promise<WorkingMdPruneResult> {
+  const result: WorkingMdPruneResult = { staleLoopsRemoved: 0, completedTasksArchived: 0 };
+  const workingPath = path.join(workspaceDir, "WORKING.md");
+
+  let content: string;
+  try {
+    content = await fs.readFile(workingPath, "utf-8");
+  } catch {
+    return result; // File doesn't exist yet
+  }
+
+  // Skip pure template files (contain placeholder brackets)
+  if (content.includes("[What you") || content.includes("[Example:")) {
+    return result;
+  }
+
+  const cutoffMs = nowMs - staleAgeMs;
+
+  // Matches open-loop items with a date annotation in one of these forms:
+  //   "- [ ] Check deploy — added 2026-03-01"   (em-dash)
+  //   "- [ ] Check deploy - added 2026-03-01"    (space + hyphen + space)
+  //   "- [ ] Check deploy (added 2026-03-01)"    (parenthetical)
+  // The bare-hyphen variant requires surrounding spaces to avoid matching
+  // hyphenated words inside the task description (e.g. "fix broken-deploy").
+  const staleLoopRe = /^\s*- \[ \] .+?(?:—|\s-\s|\()\s*added\s+(\d{4}-\d{2}-\d{2})/i;
+
+  const lines = content.split("\n");
+  const keptLines: string[] = [];
+  const completedLines: string[] = [];
+  let staleRemoved = 0;
+
+  for (const line of lines) {
+    // Detect completed checklist items
+    if (/^\s*- \[x\]/i.test(line)) {
+      completedLines.push(line.trim());
+      result.completedTasksArchived++;
+      continue; // archive it, don't keep in WORKING.md
+    }
+
+    // Detect stale open loops
+    const staleMatch = staleLoopRe.exec(line);
+    if (staleMatch) {
+      const dateStr = staleMatch[1];
+      if (dateStr) {
+        const entryMs = Date.parse(dateStr);
+        if (Number.isFinite(entryMs) && entryMs < cutoffMs) {
+          staleRemoved++;
+          continue; // drop the line
+        }
+      }
+    }
+
+    keptLines.push(line);
+  }
+
+  result.staleLoopsRemoved = staleRemoved;
+  const changed = staleRemoved > 0 || completedLines.length > 0;
+  if (!changed) {
+    return result;
+  }
+
+  // Archive completed tasks to today's daily memory log
+  if (completedLines.length > 0) {
+    const dateStr = new Date(nowMs).toISOString().slice(0, 10);
+    const dailyLogPath = path.join(workspaceDir, "memory", `${dateStr}.md`);
+    const header = `\n### Completed tasks archived from WORKING.md\n`;
+    // Lines already contain the full `- [x] ...` text; write them as-is.
+    const body = completedLines.join("\n") + "\n";
+    try {
+      await fs.mkdir(path.join(workspaceDir, "memory"), { recursive: true });
+      await fs.appendFile(dailyLogPath, header + body, "utf-8");
+      log.info(
+        `working-prune: archived ${completedLines.length} completed task(s) to ${dateStr}.md`,
+      );
+    } catch (err) {
+      log.warn(`working-prune: failed to append to daily log: ${String(err)}`);
+    }
+  }
+
+  // Rewrite WORKING.md (atomic)
+  const newContent = keptLines.join("\n");
+  const tmpPath = `${workingPath}.tmp-${process.pid}-${Date.now().toString(36)}`;
+  try {
+    await fs.writeFile(tmpPath, newContent, "utf-8");
+    await fs.rename(tmpPath, workingPath);
+    if (staleRemoved > 0) {
+      log.info(`working-prune: removed ${staleRemoved} stale open loop(s) from WORKING.md`);
+    }
+  } catch (err) {
+    await fs.unlink(tmpPath).catch(() => {});
+    log.warn(`working-prune: failed to rewrite WORKING.md: ${String(err)}`);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Daily memory log cleanup
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete dated daily memory log files (`memory/YYYY-MM-DD.md`) that are older
+ * than `maxAgeMs` (default 60 days).  Important content from these files should
+ * already be distilled into MEMORY.md / self-review.md long before this runs.
+ *
+ * The `memory/archive/` subtree and non-date-named files are never touched.
+ */
+export async function pruneOldDailyMemoryLogs(
+  workspaceDir: string,
+  maxAgeMs: number = DAILY_MEMORY_LOG_MAX_AGE_MS,
+  nowMs: number = Date.now(),
+): Promise<number> {
+  const memoryDir = path.join(workspaceDir, "memory");
+  let entries: Dirent[] = [];
+  try {
+    entries = await fs.readdir(memoryDir, { withFileTypes: true });
+  } catch {
+    return 0; // memory/ doesn't exist yet
+  }
+
+  const cutoffMs = nowMs - maxAgeMs;
+  let deleted = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !DAILY_LOG_FILENAME_RE.test(entry.name)) {
+      continue; // skip directories (archive/) and non-dated files
+    }
+    const filePath = path.join(memoryDir, entry.name);
+    try {
+      // Parse the date from the filename itself — cheaper than statting for mtime
+      const dateMs = Date.parse(entry.name.slice(0, 10));
+      if (Number.isFinite(dateMs) && dateMs < cutoffMs) {
+        await fs.unlink(filePath);
+        deleted++;
+      }
+    } catch {
+      // Best-effort; skip files we can't parse or delete
+    }
+  }
+
+  if (deleted > 0) {
+    log.info(
+      `daily-log-prune: deleted ${deleted} daily memory log(s) older than 60 days from ${memoryDir}`,
+    );
+  }
+
+  return deleted;
+}
+
+// ---------------------------------------------------------------------------
 // Multi-agent sweep
 // ---------------------------------------------------------------------------
 
@@ -799,6 +993,16 @@ export async function runDiaryArchiveSweep(
     // ── Size-triggered pruning (every tick, cheap no-op when small) ──
     await runMemoryPruneForWorkspace(workspaceDir).catch((err) =>
       log.warn(`memory-prune: sweep failed for ${workspaceDir}: ${String(err)}`),
+    );
+
+    // ── WORKING.md pruning: evict stale loops + archive completed tasks ──
+    await pruneWorkingMd(workspaceDir).catch((err) =>
+      log.warn(`working-prune: sweep failed for ${workspaceDir}: ${String(err)}`),
+    );
+
+    // ── Daily memory log cleanup: delete logs older than 60 days ──
+    await pruneOldDailyMemoryLogs(workspaceDir).catch((err) =>
+      log.warn(`daily-log-prune: sweep failed for ${workspaceDir}: ${String(err)}`),
     );
 
     // ── Deterministic MISS → CRITICAL promotion (every tick, cheap scan) ──

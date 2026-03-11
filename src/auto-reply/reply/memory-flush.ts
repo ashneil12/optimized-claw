@@ -11,18 +11,27 @@ export const DEFAULT_MEMORY_FLUSH_SOFT_TOKENS = 4000;
 export const DEFAULT_MEMORY_FLUSH_FORCE_TRANSCRIPT_BYTES = 2 * 1024 * 1024;
 
 export const DEFAULT_MEMORY_FLUSH_PROMPT = [
-  "Pre-compaction memory flush.",
-  "Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed).",
-  "IMPORTANT: If the file already exists, APPEND new content only — do not overwrite existing entries.",
-  "Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.",
-  "",
-  "Also update memory/session-context.md with a concise summary of this session so far.",
-  "Include: what the user discussed, key decisions made, anything in progress or unfinished.",
-  "Prepend the new summary with a date/time header (## Session context as of YYYY-MM-DD HH:MM UTC).",
-  "If the file already exists, prepend the new summary above existing content.",
-  "Keep the total file under 20000 characters — truncate older entries at the bottom if needed.",
+  [
+    "Pre-compaction memory flush.",
+    "Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed).",
+    "IMPORTANT: If the file already exists, APPEND new content only — do not overwrite existing entries.",
+    "Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.",
+  ].join(" "),
+  [
+    "Also update memory/session-context.md with a concise summary of this session so far.",
+    "Include: what the user discussed, key decisions made, anything in progress or unfinished.",
+    "Prepend the new summary with a date/time header (## Session context as of YYYY-MM-DD HH:MM UTC).",
+    "If the file already exists, prepend the new summary above existing content.",
+    "Keep the total file under 20000 characters — truncate older entries at the bottom if needed.",
+  ].join(" "),
+  [
+    "Also update WORKING.md before compaction:",
+    "- Mark any tasks you completed this session as [x] (not [ ]).",
+    "- Ensure every open loop item has '— added YYYY-MM-DD' appended; add today's date if missing.",
+    "- Remove any [ ] items you know are no longer relevant.",
+  ].join(" "),
   `If nothing to store and no session context to summarize, reply with ${SILENT_REPLY_TOKEN}.`,
-].join(" ");
+].join("\n\n");
 
 export const DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT = [
   "Pre-compaction memory flush turn.",

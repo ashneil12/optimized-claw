@@ -427,3 +427,206 @@ MISS: x — FIX: Always verify the API health status before calling
     expect(result.promoted).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// pruneWorkingMd tests
+// ---------------------------------------------------------------------------
+
+import {
+  pruneWorkingMd,
+  pruneOldDailyMemoryLogs,
+  WORKING_STALE_LOOP_MAX_AGE_MS,
+  DAILY_MEMORY_LOG_MAX_AGE_MS,
+} from "./diary-archive.js";
+
+describe("pruneWorkingMd", () => {
+  it("no-ops when WORKING.md does not exist", async () => {
+    const result = await pruneWorkingMd(tmpDir);
+    expect(result.staleLoopsRemoved).toBe(0);
+    expect(result.completedTasksArchived).toBe(0);
+  });
+
+  it("no-ops on pure template file (contains placeholder brackets)", async () => {
+    const template = `# WORKING.md\n\n## Current Task\n\n[What you're actively working on]\n\n## Open Loops\n\n- [ ] [Example: Check if deploy succeeded — added DATE]\n`;
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), template, "utf-8");
+    const result = await pruneWorkingMd(tmpDir);
+    expect(result.staleLoopsRemoved).toBe(0);
+    expect(result.completedTasksArchived).toBe(0);
+  });
+
+  it("removes stale open loops older than staleAgeMs", async () => {
+    // Use a very small staleAgeMs so the date in the past is considered stale
+    const content = [
+      "# WORKING.md",
+      "",
+      "## Open Loops",
+      "",
+      "- [ ] Check deploy outcome — added 2020-01-01",
+      "- [ ] Follow up with client — added 2020-02-15",
+      "- [ ] Still fresh task — added 2099-12-31",
+    ].join("\n");
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), content, "utf-8");
+
+    const result = await pruneWorkingMd(tmpDir, Date.now(), 1); // 1ms stale threshold
+    expect(result.staleLoopsRemoved).toBe(2);
+
+    const updated = await fs.readFile(path.join(tmpDir, "WORKING.md"), "utf-8");
+    expect(updated).not.toContain("Check deploy outcome");
+    expect(updated).not.toContain("Follow up with client");
+    expect(updated).toContain("Still fresh task");
+  });
+
+  it("archives completed [x] tasks to today's daily memory log", async () => {
+    const nowMs = Date.now();
+    const dateStr = new Date(nowMs).toISOString().slice(0, 10);
+
+    const content = [
+      "# WORKING.md",
+      "",
+      "## Tasks",
+      "",
+      "- [x] Ship the new feature",
+      "- [x] Write the tests",
+      "- [ ] Deploy to production — added 2099-01-01",
+    ].join("\n");
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), content, "utf-8");
+
+    const result = await pruneWorkingMd(tmpDir, nowMs);
+    expect(result.completedTasksArchived).toBe(2);
+
+    // Completed tasks should no longer be in WORKING.md
+    const updated = await fs.readFile(path.join(tmpDir, "WORKING.md"), "utf-8");
+    expect(updated).not.toContain("Ship the new feature");
+    expect(updated).not.toContain("Write the tests");
+    expect(updated).toContain("Deploy to production");
+
+    // Completed tasks should appear in today's daily log
+    const dailyLog = await fs.readFile(path.join(tmpDir, "memory", `${dateStr}.md`), "utf-8");
+    expect(dailyLog).toContain("Ship the new feature");
+    expect(dailyLog).toContain("Write the tests");
+    expect(dailyLog).toContain("Completed tasks archived from WORKING.md");
+  });
+
+  it("does not modify file when nothing to prune", async () => {
+    const content = [
+      "# WORKING.md",
+      "",
+      "## Current Task",
+      "",
+      "Working on the dashboard redesign.",
+      "",
+      "## Open Loops",
+      "",
+      "- [ ] Check Stripe webhook — added 2099-01-01",
+    ].join("\n");
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), content, "utf-8");
+
+    const result = await pruneWorkingMd(tmpDir, Date.now(), WORKING_STALE_LOOP_MAX_AGE_MS);
+    expect(result.staleLoopsRemoved).toBe(0);
+    expect(result.completedTasksArchived).toBe(0);
+
+    // File should be unchanged
+    const updated = await fs.readFile(path.join(tmpDir, "WORKING.md"), "utf-8");
+    expect(updated).toBe(content);
+  });
+
+  it("does not remove loops whose task description contains a hyphen (regression)", async () => {
+    // Previously the bare-hyphen regex matched any hyphenated word in the task text.
+    // e.g. "- [ ] fix broken-deploy stuff" was incorrectly treated as having
+    // an "added" date of "deploy" and getting evicted.
+    const content = [
+      "# WORKING.md",
+      "",
+      "- [ ] fix broken-deploy integration — no date here",
+      "- [ ] check self-review file — no date here",
+    ].join("\n");
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), content, "utf-8");
+
+    const result = await pruneWorkingMd(tmpDir, Date.now(), 1); // aggressive threshold
+    // Neither line has a date annotation in the expected format → nothing removed
+    expect(result.staleLoopsRemoved).toBe(0);
+    const updated = await fs.readFile(path.join(tmpDir, "WORKING.md"), "utf-8");
+    expect(updated).toContain("fix broken-deploy integration");
+    expect(updated).toContain("check self-review file");
+  });
+
+  it("writes completed tasks with [x] prefix directly (no double-dash) in daily log", async () => {
+    const nowMs = Date.now();
+    const dateStr = new Date(nowMs).toISOString().slice(0, 10);
+
+    const content = ["# WORKING.md", "- [x] Refactor the noise filter"].join("\n");
+    await fs.writeFile(path.join(tmpDir, "WORKING.md"), content, "utf-8");
+
+    await pruneWorkingMd(tmpDir, nowMs);
+
+    const dailyLog = await fs.readFile(path.join(tmpDir, "memory", `${dateStr}.md`), "utf-8");
+    // Should be "- [x] Refactor..." not "- - [x] Refactor..."
+    expect(dailyLog).toContain("- [x] Refactor the noise filter");
+    expect(dailyLog).not.toContain("- - [x]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pruneOldDailyMemoryLogs tests
+// ---------------------------------------------------------------------------
+
+describe("pruneOldDailyMemoryLogs", () => {
+  it("returns 0 when memory/ directory does not exist", async () => {
+    const freshDir = await fs.mkdtemp(path.join(os.tmpdir(), "fresh-ws-"));
+    try {
+      const deleted = await pruneOldDailyMemoryLogs(freshDir);
+      expect(deleted).toBe(0);
+    } finally {
+      await fs.rm(freshDir, { recursive: true, force: true });
+    }
+  });
+
+  it("deletes daily log files older than maxAgeMs", async () => {
+    const memDir = path.join(tmpDir, "memory");
+
+    // Write three dated files in the past
+    await fs.writeFile(path.join(memDir, "2020-01-01.md"), "old log 1", "utf-8");
+    await fs.writeFile(path.join(memDir, "2020-06-15.md"), "old log 2", "utf-8");
+    // Write a recent file (far future date — never gets deleted)
+    await fs.writeFile(path.join(memDir, "2099-12-31.md"), "recent log", "utf-8");
+    // Write a non-dated file that must be preserved
+    await fs.writeFile(path.join(memDir, "session-context.md"), "context", "utf-8");
+
+    const deleted = await pruneOldDailyMemoryLogs(tmpDir, DAILY_MEMORY_LOG_MAX_AGE_MS, Date.now());
+    expect(deleted).toBe(2);
+
+    // Old files gone
+    await expect(fs.access(path.join(memDir, "2020-01-01.md"))).rejects.toThrow();
+    await expect(fs.access(path.join(memDir, "2020-06-15.md"))).rejects.toThrow();
+
+    // Recent and non-dated files survive
+    await expect(fs.access(path.join(memDir, "2099-12-31.md"))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(memDir, "session-context.md"))).resolves.toBeUndefined();
+  });
+
+  it("does not delete files inside memory/archive/ subdirectory", async () => {
+    const memDir = path.join(tmpDir, "memory");
+    const archiveDir = path.join(memDir, "archive", "2020-01");
+    await fs.mkdir(archiveDir, { recursive: true });
+    await fs.writeFile(path.join(archiveDir, "2020-01-01.md"), "archived content", "utf-8");
+
+    // Only files in memory/ root are matched — subdirectories are skipped
+    const deleted = await pruneOldDailyMemoryLogs(tmpDir, DAILY_MEMORY_LOG_MAX_AGE_MS, Date.now());
+    expect(deleted).toBe(0);
+
+    // Archive file untouched
+    await expect(fs.access(path.join(archiveDir, "2020-01-01.md"))).resolves.toBeUndefined();
+  });
+
+  it("preserves recent daily logs within the retention window", async () => {
+    const memDir = path.join(tmpDir, "memory");
+    const recentDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000); // 10 days ago
+    const recentStr = recentDate.toISOString().slice(0, 10);
+    await fs.writeFile(path.join(memDir, `${recentStr}.md`), "recent content", "utf-8");
+
+    const deleted = await pruneOldDailyMemoryLogs(tmpDir, DAILY_MEMORY_LOG_MAX_AGE_MS, Date.now());
+    expect(deleted).toBe(0);
+
+    await expect(fs.access(path.join(memDir, `${recentStr}.md`))).resolves.toBeUndefined();
+  });
+});

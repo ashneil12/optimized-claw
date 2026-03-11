@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { cleanUserContent, isMeaningfulUserContent } from "./noise-patterns.js";
 import type { CompressionConfig } from "./trajectory-compressor.js";
+import { compressTrajectorySync } from "./trajectory-compressor.js";
 
 const log = createSubsystemLogger("session-context");
 
@@ -87,10 +89,15 @@ export function extractSessionContextFromTranscript(transcriptPath: string): str
     const text = extractMessageText(msg).trim();
 
     if (msg.role === "user" && text) {
-      userMessages.push({
-        text: text.slice(0, MAX_MESSAGE_CHARS),
-        timestamp: entry.timestamp,
-      });
+      // Strip noise injections before recording — skip the turn entirely if
+      // nothing meaningful remains (heartbeat/BOOTSTRAP/metadata-only turns).
+      const cleaned = cleanUserContent(text);
+      if (isMeaningfulUserContent(cleaned)) {
+        userMessages.push({
+          text: cleaned.slice(0, MAX_MESSAGE_CHARS),
+          timestamp: entry.timestamp,
+        });
+      }
     }
 
     // Track tool usage
@@ -212,9 +219,6 @@ export function persistSessionContextOnReset(params: {
   summarize?: CompressionConfig["summarize"];
 }): void {
   try {
-    const { compressTrajectorySync } = require("./trajectory-compressor.js") as {
-      compressTrajectorySync: typeof import("./trajectory-compressor.js").compressTrajectorySync;
-    };
     const result = compressTrajectorySync({
       transcriptPath: params.transcriptPath,
     });

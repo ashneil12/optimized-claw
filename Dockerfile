@@ -243,11 +243,12 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # memory.backend = "qmd" (OPENCLAW_QMD_ENABLED=true).
 # Must be installed at build time so the binary is present in the image;
 # omitting this causes spawn ENOENT errors every 5 minutes at runtime.
-# Pinned to v1.1.6 for reproducible builds.
-# Note: bun install -g from GitHub installs source (not compiled dist/),
-# so we create a bun-run shim at /usr/local/bin/qmd pointing to src/qmd.ts.
-RUN /root/.bun/bin/bun install --trust -g 'https://github.com/tobi/qmd#v1.1.6' \
-  && QMD_SRC=$(find / -path "*/node_modules/@tobilu/qmd/src/qmd.ts" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -1) \
+# Pinned to v2.0.1 for reproducible builds.
+# Note: bun install -g from GitHub installs source (not compiled dist/).
+# In v2.0.0+ the CLI entrypoint is at src/cli/qmd.ts; we create a
+# bun-run shim at /usr/local/bin/qmd pointing to that path.
+RUN /root/.bun/bin/bun install --trust -g 'https://github.com/tobi/qmd#v2.0.1' \
+  && QMD_SRC=$(find / -path "*/node_modules/@tobilu/qmd/src/cli/qmd.ts" -not -path "/proc/*" -not -path "/sys/*" 2>/dev/null | head -1) \
   && if [ -z "$QMD_SRC" ]; then echo "ERROR: qmd source not found after install" && exit 1; fi \
   && printf '#!/bin/sh\nexec /root/.bun/bin/bun run %s "$@"\n' "$QMD_SRC" > /usr/local/bin/qmd \
   && chmod +x /usr/local/bin/qmd \

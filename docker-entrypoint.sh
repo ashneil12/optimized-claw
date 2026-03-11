@@ -698,10 +698,11 @@ if [ "${OPENCLAW_QMD_ENABLED:-false}" = "true" ] || [ "${OPENCLAW_QMD_ENABLED:-f
     echo "[entrypoint] Installing qmd memory sidecar..."
     BUN_BIN="/root/.bun/bin/bun"
     if [ -f "$BUN_BIN" ]; then
-      # Pinned to v1.1.6 — bun install -g from GitHub installs source (not compiled dist/).
-      # Search bun's global install location for src/qmd.ts and create a bun-run shim.
-      "$BUN_BIN" install --trust -g 'https://github.com/tobi/qmd#v1.1.6' 2>&1 | tail -3
-      QMD_SRC=$(find /root/.bun/install/global /root/.bun -path "*/node_modules/@tobilu/qmd/src/qmd.ts" 2>/dev/null | head -1)
+      # Pinned to v2.0.1 — bun install -g from GitHub installs source (not compiled dist/).
+      # In v2.0.0+ the CLI entrypoint is at src/cli/qmd.ts.
+      # Search bun's global install location for src/cli/qmd.ts and create a bun-run shim.
+      "$BUN_BIN" install --trust -g 'https://github.com/tobi/qmd#v2.0.1' 2>&1 | tail -3
+      QMD_SRC=$(find /root/.bun/install/global /root/.bun -path "*/node_modules/@tobilu/qmd/src/cli/qmd.ts" 2>/dev/null | head -1)
       if [ -n "$QMD_SRC" ]; then
         printf '#!/bin/sh\nexec /root/.bun/bin/bun run %s "$@"\n' "$QMD_SRC" > /usr/local/bin/qmd
         chmod +x /usr/local/bin/qmd
@@ -739,6 +740,27 @@ if [ -f "$ENFORCE_CONFIG_SCRIPT" ] && [ -s "$CONFIG_FILE" ]; then
     echo "[entrypoint] enforce-config completed"
   else
     echo "[entrypoint] WARNING: enforce-config failed (non-fatal, continuing)"
+  fi
+fi
+
+# =============================================================================
+# BACKUP RESTORE: Apply a previously stored OpenClaw backup on first boot
+#
+# When MOLTBOT_RESTORE_BACKUP_KEY is set (e.g. after a user imports a backup
+# from the dashboard), we download the archive from Supabase Storage and
+# extract the config before the gateway starts. A marker file prevents the
+# restore from running again on subsequent boots.
+#
+# Remove MOLTBOT_RESTORE_BACKUP_KEY from the instance env vars after confirming
+# the restore was successful to prevent accidental re-application.
+# =============================================================================
+if [ -n "${MOLTBOT_RESTORE_BACKUP_KEY:-}" ]; then
+  RESTORE_SCRIPT="/home/node/scripts/restore-from-backup.sh"
+  if [ -f "$RESTORE_SCRIPT" ]; then
+    echo "[entrypoint] MOLTBOT_RESTORE_BACKUP_KEY set — running restore..."
+    bash "$RESTORE_SCRIPT" 2>&1 || echo "[entrypoint] WARNING: restore failed (non-fatal, continuing with existing config)"
+  else
+    echo "[entrypoint] WARNING: restore-from-backup.sh not found at $RESTORE_SCRIPT — skipping"
   fi
 fi
 

@@ -26,11 +26,13 @@
 
 - [ ] [Example: Check if deployment succeeded — added DATE]
 
-**Rules:**
-- Add items when you say "I'll check on this later"
-- Add items when waiting for external response
-- Review during heartbeat, close or escalate
-- Delete after 7 days if no longer relevant
+**Rules (ENFORCED — not guidelines):**
+
+- **When you finish a task, mark it `[x]` immediately.** Do not leave completed work as `[ ]`. The pruner reads `[x]` to archive completed items.
+- **Every open loop MUST include `— added YYYY-MM-DD`** so the pruner can detect and evict stale items after 7 days. Example: `- [ ] Confirm Stripe webhook is live — added 2026-03-11`
+- **Add loops when you say "I'll check on this later"** or when waiting for external response.
+- **Review during heartbeat** — close loops you can verify, escalate ones that are blocked.
+- Loops without a date annotation will never be auto-evicted. Add the date or they stay forever.
 
 ---
 

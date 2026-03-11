@@ -5,6 +5,28 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## enforce-config.mjs Dead Code Cleanup (2026-03-10)
+
+**Purpose:** Remove ~115 lines of unreachable/dead code from `ensureAgentBrowserContainers` to improve maintainability.
+
+### What Changed
+
+| File                 | Change                                                                                                                                                                                   | Upstream Risk            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `enforce-config.mjs` | `ensureAgentBrowserContainers` — replaced the disabled function body (dead code after early `return`) with a clean no-op stub and a full historical explanation of why this was disabled | None — fully custom file |
+
+### Why
+
+The function was disabled via `return; /* eslint-disable no-unreachable */` after it caused
+compose/standalone container conflicts. The ~115 lines of old Docker provisioning code below
+the return were unreachable and accumulating as a maintenance liability (dead imports,
+dead env var refs, false ESLint suppression). The function signature is preserved so the
+`browser-containers` CLI command and the `all` command chain continue to work.
+
+**Upstream sync risk:** None. `enforce-config.mjs` is a fully custom file not present in upstream.
+
+---
+
 ## Workspace Auto-Indexing & `workspace_search` Tool (2026-03-10)
 
 **Purpose:** Add a second search layer that is workspace-aware and distinct from personal memory search. Previously, `memory_search` searched everything — QMD indexes personal memory and business documents in the same pool, so there was no clean way for an agent to search only workspace documents (e.g. `business/`, notes, docs) vs only personal memories. This change auto-indexes the workspace root on boot and exposes a `workspace_search` tool that searches only workspace-kind collections.
