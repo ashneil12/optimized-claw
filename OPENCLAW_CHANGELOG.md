@@ -5,6 +5,36 @@ For the upstream sync reference (what to preserve during merges), see `OPENCLAW_
 
 ---
 
+## Per-Agent Browser Fix: Variable Substitution & OOM Crash (v1.0.3, 2026-03-11)
+
+**Purpose:** Fix two bugs in `ensure-agent-browsers.sh` that prevented per-agent browser containers from launching correctly.
+
+### Bug 1 — `docker-compose.override.yml` generated with literal `${AGENT}` variables
+
+The shell script built its override file by appending to a `$OVERRIDE` string variable with triple-backslash-escaped variables (`\\\\\\${AGENT}`, etc.). Due to multiple layers of shell + TypeScript template string escaping, these collapsed to literal `${AGENT}` / `${BROWSER_IMAGE}` in the written YAML. Docker Compose then rejected the file as an invalid service name.
+
+**Fix:** Replaced the string-concatenation approach with `printf` calls writing directly to `docker-compose.override.yml` per agent. Shell variables expand naturally in the surrounding `for` loop scope — no escaping required. Added a `docker compose config --quiet` validation step before starting containers so failures are caught with context.
+
+### Bug 2 — Chrome renderer OOM-killed on modern sites (Reddit, etc.)
+
+Per-agent browser containers had `mem_limit: 512m`. Chrome's renderer processes for modern JS-heavy SPAs require more memory. The Linux kernel cgroup was OOM-killing the renderer (confirmed via `dmesg`), producing "Can't open this page" (Chrome error code 9).
+
+**Fix:** Raised `mem_limit` from `512m` to `2g` for all per-agent browser containers (both Chrome and Camofox modes). The managed server has ample RAM available.
+
+### Changes (moltbot-dashboard)
+
+| File                                           | Change                                                                                                           | Upstream Risk       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `src/lib/services/hetzner-instance-service.ts` | `renderAgentBrowserScript()`: rewrote YAML generation from `$OVERRIDE` string concatenation → `printf` per field | None — fully custom |
+| `src/lib/services/hetzner-instance-service.ts` | Added `docker compose config --quiet` validation before `docker compose up -d`                                   | None                |
+| `src/lib/services/hetzner-instance-service.ts` | `mem_limit: 512m` → `mem_limit: 2g` for both Chrome and Camofox browser blocks                                   | None                |
+
+### Upstream Sync Risk
+
+**None.** `hetzner-instance-service.ts` is a fully custom dashboard file.
+
+---
+
 ## Workspace Document Auto-Converter (2026-03-11)
 
 **Purpose:** Automatically convert non-markdown files (PDF, TXT, DOCX, ODT, CSV, EPUB) dropped into the workspace to markdown so that QMD can index them without any manual steps. The converter is fully deterministic — no LLM involved.
