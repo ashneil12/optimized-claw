@@ -844,6 +844,7 @@ DOC_CONVERTER_SCRIPT="/app/scripts/workspace-doc-converter.sh"
 
 if [ "$DOC_CONVERTER_ENABLED" != "false" ] && [ "$DOC_CONVERTER_ENABLED" != "0" ]; then
   if [ -f "$DOC_CONVERTER_SCRIPT" ]; then
+    mkdir -p "${WORKSPACE_DIR}/converter-log"
     bash "$DOC_CONVERTER_SCRIPT" \
       --interval 300 \
       >> "${WORKSPACE_DIR}/converter-log/converter.log" 2>&1 &
