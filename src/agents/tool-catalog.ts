@@ -100,15 +100,7 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
   {
     id: "memory_search",
     label: "memory_search",
-    description: "Semantic search",
-    sectionId: "memory",
-    profiles: ["coding"],
-    includeInOpenClawGroup: true,
-  },
-  {
-    id: "workspace_search",
-    label: "workspace_search",
-    description: "Search all indexed documents in the workspace",
+    description: "Semantic search across memory and workspace documents",
     sectionId: "memory",
     profiles: ["coding"],
     includeInOpenClawGroup: true,

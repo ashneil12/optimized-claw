@@ -1548,7 +1548,7 @@ export class QmdMemoryManager implements MemorySearchManager {
    * collections actually have indexed documents.  Zero documents typically
    * means the collection path is wrong or addCollection failed — surface a
    * prominent warning so operators can act on it rather than silently getting
-   * empty workspace_search results forever.
+   * empty memory_search workspace results forever.
    */
   private warnIfWorkspaceCollectionsEmpty(): void {
     const workspaceCollections = this.qmd.collections.filter((c) => c.kind === "workspace");
@@ -1572,12 +1572,12 @@ export class QmdMemoryManager implements MemorySearchManager {
         log.warn(
           `workspace_search: 0 documents indexed for collection(s) [${names.join(", ")}] ` +
             `at path(s) [${paths.join(", ")}]. ` +
-            `workspace_search will return empty results. ` +
+            `memory_search will return empty workspace results. ` +
             `Verify the workspace path exists with *.md files and check earlier qmd collection add entries for errors.`,
         );
       } else {
         log.info(
-          `workspace_search ready — ${count} document(s) indexed in workspace collection(s) [${names.join(", ")}]`,
+          `memory_search workspace ready — ${count} document(s) indexed in workspace collection(s) [${names.join(", ")}]`,
         );
       }
     } catch {
