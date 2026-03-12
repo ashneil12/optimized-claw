@@ -82,6 +82,14 @@ export function evaluateMissingDeviceIdentity(params: {
   if (params.isControlUi && params.trustedProxyAuthOk) {
     return { kind: "allow" };
   }
+  // When dangerouslyDisableDeviceAuth is set, device identity is fully waived
+  // for Control UI connections. Token auth is still enforced downstream by
+  // resolveConnectAuthDecision — this function's scope is solely device-identity
+  // gating. Without this, the Control UI can't even establish the initial WS
+  // connection needed to prompt the user for their auth token.
+  if (params.isControlUi && params.controlUiAuthPolicy.allowBypass) {
+    return { kind: "allow" };
+  }
   if (params.isControlUi && !params.controlUiAuthPolicy.allowBypass) {
     // Allow localhost Control UI connections when allowInsecureAuth is configured.
     // Localhost has no network interception risk, and browser SubtleCrypto
