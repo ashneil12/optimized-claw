@@ -15,6 +15,9 @@ env:
 
 jobs:
   publish_openclaw_npm:
+    # Disabled in optimized-claw fork — this workflow is only applicable to upstream openclaw npm releases.
+    # Our fork uses semver (1.0.x) not YYYY.M.D, and we don't publish to npm.
+    if: false
     # npm trusted publishing + provenance requires a GitHub-hosted runner.
     runs-on: ubuntu-latest
     permissions:
