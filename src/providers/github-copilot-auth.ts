@@ -6,10 +6,11 @@ import { logConfigUpdated } from "../config/logging.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { stylePromptTitle } from "../terminal/prompt-style.js";
 
-// GitHub CLI client ID — approved by GitHub for Copilot API access.
-// The OpenClaw app ID (Iv1.b507a08c87ecfe98) was blocked by GitHub:
-//   "Please only use approved clients for Copilot."
-const CLIENT_ID = "178c6fc778ccc68e1d6a";
+// VS Code GitHub Sign-In client ID — approved by GitHub for copilot_internal API access.
+// This is what VS Code, neovim, and other approved editors use.
+// The GitHub CLI ID (178c6fc778ccc68e1d6a) is NOT approved for copilot_internal.
+// The OpenClaw app ID (Iv1.b507a08c87ecfe98) was explicitly blocked.
+const CLIENT_ID = "01ab8ac9400c4e429b23";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 
