@@ -789,6 +789,54 @@ if [ -n "${MOLTBOT_RESTORE_BACKUP_KEY:-}" ]; then
 fi
 
 # =============================================================================
+# DEVICE SCOPE BASELINE MIGRATION: Backfill approvedScopes on existing paired
+# device records that predate the upstream "fail closed without device scope
+# baseline" security change (openclaw 2026.3.11 / v1.0.4).
+#
+# Before this change, paired device records had no approvedScopes field.
+# After it, the gateway rejects any device missing approvedScopes with
+# "device identity required" — breaking existing deployments on upgrade.
+#
+# Fix: idempotently add approvedScopes: ["operator.admin"] to any device
+# record that is missing the field. Runs on every container start (safe —
+# the jq filter is a no-op if the field already exists).
+# =============================================================================
+DEVICES_PAIRED_FILE="$CONFIG_DIR/devices/paired.json"
+if [ -f "$DEVICES_PAIRED_FILE" ] && command -v jq &>/dev/null; then
+  MIGRATED=$(jq '
+    with_entries(
+      .value |= if .approvedScopes == null then
+        .approvedScopes = ["operator.admin"]
+      else
+        .
+      end
+    )
+  ' "$DEVICES_PAIRED_FILE" 2>/dev/null)
+  if [ -n "$MIGRATED" ]; then
+    echo "$MIGRATED" > "$DEVICES_PAIRED_FILE.tmp" && mv "$DEVICES_PAIRED_FILE.tmp" "$DEVICES_PAIRED_FILE"
+    echo "[entrypoint] device scope baseline migration applied (approvedScopes backfilled)"
+  fi
+elif [ -f "$DEVICES_PAIRED_FILE" ]; then
+  # jq not available — fall back to node
+  node -e "
+    const fs = require('fs');
+    const path = '$DEVICES_PAIRED_FILE';
+    const devices = JSON.parse(fs.readFileSync(path, 'utf8'));
+    let changed = false;
+    for (const id of Object.keys(devices)) {
+      if (!devices[id].approvedScopes) {
+        devices[id].approvedScopes = ['operator.admin'];
+        changed = true;
+      }
+    }
+    if (changed) {
+      fs.writeFileSync(path, JSON.stringify(devices, null, 2));
+      console.log('[entrypoint] device scope baseline migration applied (node fallback)');
+    }
+  " 2>&1 || echo "[entrypoint] WARNING: device scope migration failed (non-fatal)"
+fi
+
+# =============================================================================
 # AUTO-APPROVE DEVICE PAIRING: Background a loop that waits for the gateway
 # to accept connections, then auto-approves the pending local device.
 #
