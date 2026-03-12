@@ -113,6 +113,10 @@ export async function resolveCopilotApiToken(params: {
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${params.githubToken}`,
+      // GitHub REST API requires a User-Agent header; omitting it returns HTTP 403:
+      // "Request forbidden by administrative rules. Please make sure your request
+      //  has a User-Agent header."
+      "User-Agent": "OpenClaw/1.0 (github-copilot-provider)",
     },
   });
 
