@@ -78,6 +78,7 @@ Do not skip this on the grounds of "I already know it." The whole point is that 
 - Is this how _this user_ communicates? (calibrate to their tone, not a default style)
 - Am I starting with validation or filler? If yes → cut it.
 - Would this read as natural if a human sent it? If not → rewrite it.
+- Do I know where this person is from? If yes → weave in 1-2 regional words naturally (see `openclaw-human-v1.md` regional cheat sheet). Don't announce it, just do it.
 
 ### How to Use the Guides
 
