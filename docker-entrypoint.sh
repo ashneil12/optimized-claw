@@ -809,6 +809,31 @@ if [ "$DOC_CONVERTER_ENABLED" != "false" ] && [ "$DOC_CONVERTER_ENABLED" != "0" 
   fi
 fi
 
+# =============================================================================
+# BYTEROVER CURATE WATCHER: Background daemon that runs brv curate when key
+# agent memory/identity files change (sha256 checksum diff).
+# Watches: MEMORY.md, USER.md, IDENTITY.md, SOUL.md, diary/*.md
+# Polls every 5 minutes — only calls brv (Gemini API) when content changes.
+# Gated on BYTEROVER_GEMINI_KEY and brv availability.
+# Set OPENCLAW_BRV_CURATE_DISABLED=true to suppress.
+# =============================================================================
+BRV_WATCHER_SCRIPT="/app/scripts/brv-curate-watcher.sh"
+
+if [ -n "$BYTEROVER_KEY" ] && command -v brv &>/dev/null; then
+  if [ -f "$BRV_WATCHER_SCRIPT" ]; then
+    mkdir -p "${WORKSPACE_DIR}/converter-log"
+    WORKSPACE_DIR="$WORKSPACE_DIR" \
+    OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-$CONFIG_DIR}" \
+    bash "$BRV_WATCHER_SCRIPT" \
+      --interval 300 \
+      >> "${WORKSPACE_DIR}/converter-log/brv-curate.log" 2>&1 &
+    echo "[entrypoint] brv-curate-watcher started (poll interval: 5m, PID: $!)"
+  else
+    echo "[entrypoint] WARNING: brv-curate-watcher.sh not found at $BRV_WATCHER_SCRIPT — skipping"
+  fi
+fi
+
+
 # Execute the main command as root — no privilege drop.
 # The agent already had passwordless sudo, so dropping to node was security theater.
 # Running as root eliminates permission issues (npm global installs, file ownership)
