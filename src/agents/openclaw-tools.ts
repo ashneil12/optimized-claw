@@ -27,6 +27,7 @@ import { createSqlExecuteTool, createSqlQueryTool } from "./tools/sql-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
+import { createWorkspaceSearchTool } from "./tools/workspace-search-tool.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
 export function createOpenClawTools(
@@ -244,6 +245,15 @@ export function createOpenClawTools(
   });
   if (sessionSearchTool) {
     tools.push(sessionSearchTool);
+  }
+
+  // Workspace search — QMD semantic search across workspace documents (distinct from memory_search)
+  const workspaceSearchTool = createWorkspaceSearchTool({
+    config: options?.config,
+    agentSessionKey: options?.agentSessionKey,
+  });
+  if (workspaceSearchTool) {
+    tools.push(workspaceSearchTool);
   }
 
   // Skill management — agents can create/update/delete/list skill docs
