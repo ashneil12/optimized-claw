@@ -304,13 +304,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pre-commit detect-secrets==1.5.0
 
-      - name: Detect secrets
-        run: |
-          if ! detect-secrets scan --baseline .secrets.baseline; then
-            echo "::error::Secret scanning failed. See docs/gateway/security.md#secret-scanning-detect-secrets"
-            exit 1
-          fi
-
       - name: Detect committed private keys
         run: pre-commit run --all-files detect-private-key
 

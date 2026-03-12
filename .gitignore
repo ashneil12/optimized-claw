@@ -58,7 +58,7 @@ apps/ios/*.xcfilelist
 
 # Vendor build artifacts
 vendor/a2ui/renderers/lit/dist/
-# src/canvas-host/a2ui/*.bundle.js  — tracked: needed for Docker builds
+src/canvas-host/a2ui/*.bundle.js
 src/canvas-host/a2ui/*.map
 .bundle.hash
 
@@ -81,6 +81,7 @@ apps/ios/*.mobileprovision
 # Local untracked files
 .local/
 docs/.local/
+tmp/
 IDENTITY.md
 USER.md
 .tgz
@@ -121,15 +122,4 @@ dist/protocol.schema.json
 
 # Synthing
 **/.stfolder/
-
-
-# Temp/junk files (macOS copy artifacts, logs, scratch docs)
-CLAUDE.md
-CLAUDE*.md
-tmp-*
-server.log
-*.log
-.git 2/
-package-lock.json
-data/
-upstream
+.dev-state

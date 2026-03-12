@@ -59,6 +59,8 @@ const mocks = vi.hoisted(() => {
       }
       return null;
     }),
+    hasUsableCustomProviderApiKey: vi.fn().mockReturnValue(false),
+    resolveUsableCustomProviderApiKey: vi.fn().mockReturnValue(null),
     getCustomProviderApiKey: vi.fn().mockReturnValue(undefined),
     getShellEnvAppliedKeys: vi.fn().mockReturnValue(["OPENAI_API_KEY", "ANTHROPIC_OAUTH_TOKEN"]),
     shouldEnableShellEnvFallback: vi.fn().mockReturnValue(true),
@@ -102,6 +104,8 @@ vi.mock("../../agents/auth-profiles.js", async (importOriginal) => {
 
 vi.mock("../../agents/model-auth.js", () => ({
   resolveEnvApiKey: mocks.resolveEnvApiKey,
+  hasUsableCustomProviderApiKey: mocks.hasUsableCustomProviderApiKey,
+  resolveUsableCustomProviderApiKey: mocks.resolveUsableCustomProviderApiKey,
   getCustomProviderApiKey: mocks.getCustomProviderApiKey,
 }));
 
