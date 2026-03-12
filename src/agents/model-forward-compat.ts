@@ -16,7 +16,14 @@ const OPENAI_CODEX_GPT_54_CONTEXT_TOKENS = 1_050_000;
 const OPENAI_CODEX_GPT_54_MAX_TOKENS = 128_000;
 const OPENAI_CODEX_GPT_54_TEMPLATE_MODEL_IDS = ["gpt-5.3-codex", "gpt-5.2-codex"] as const;
 const OPENAI_CODEX_GPT_53_MODEL_ID = "gpt-5.3-codex";
+const OPENAI_CODEX_GPT_53_CONTEXT_TOKENS = 400_000;
+const OPENAI_CODEX_GPT_53_MAX_TOKENS = 128_000;
 const OPENAI_CODEX_TEMPLATE_MODEL_IDS = ["gpt-5.2-codex"] as const;
+
+const OPENAI_CODEX_GPT_53_SPARK_MODEL_ID = "gpt-5.3-codex-spark";
+const OPENAI_CODEX_GPT_53_SPARK_CONTEXT_TOKENS = 128_000;
+const OPENAI_CODEX_GPT_53_SPARK_MAX_TOKENS = 128_000;
+const OPENAI_CODEX_GPT_53_SPARK_TEMPLATE_MODEL_IDS = ["gpt-5.3-codex", "gpt-5.2-codex"] as const;
 
 const ANTHROPIC_OPUS_46_MODEL_ID = "claude-opus-4-6";
 const ANTHROPIC_OPUS_46_DOT_MODEL_ID = "claude-opus-4.6";
@@ -113,6 +120,7 @@ function cloneFirstTemplateModel(params: {
 
 const CODEX_GPT54_ELIGIBLE_PROVIDERS = new Set(["openai-codex"]);
 const CODEX_GPT53_ELIGIBLE_PROVIDERS = new Set(["openai-codex", "github-copilot"]);
+const CODEX_GPT53_SPARK_ELIGIBLE_PROVIDERS = new Set(["openai-codex"]);
 
 function resolveOpenAICodexForwardCompatModel(
   provider: string,
@@ -136,6 +144,17 @@ function resolveOpenAICodexForwardCompatModel(
   } else if (lower === OPENAI_CODEX_GPT_53_MODEL_ID) {
     templateIds = OPENAI_CODEX_TEMPLATE_MODEL_IDS;
     eligibleProviders = CODEX_GPT53_ELIGIBLE_PROVIDERS;
+    patch = {
+      contextWindow: OPENAI_CODEX_GPT_53_CONTEXT_TOKENS,
+      maxTokens: OPENAI_CODEX_GPT_53_MAX_TOKENS,
+    };
+  } else if (lower === OPENAI_CODEX_GPT_53_SPARK_MODEL_ID) {
+    templateIds = OPENAI_CODEX_GPT_53_SPARK_TEMPLATE_MODEL_IDS;
+    eligibleProviders = CODEX_GPT53_SPARK_ELIGIBLE_PROVIDERS;
+    patch = {
+      contextWindow: OPENAI_CODEX_GPT_53_SPARK_CONTEXT_TOKENS,
+      maxTokens: OPENAI_CODEX_GPT_53_SPARK_MAX_TOKENS,
+    };
   } else {
     return undefined;
   }

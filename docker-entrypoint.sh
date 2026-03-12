@@ -518,158 +518,74 @@ if [ ! -d "$SUBAGENT_LOG_DIR" ]; then
 fi
 
 # =============================================================================
-# HONCHO MEMORY PLUGIN: Auto-install when HONCHO_API_KEY is set
-# The @honcho-ai/openclaw-honcho plugin provides cross-session AI memory tools
-# (honcho_context, honcho_search, honcho_recall, honcho_analyze).
-# It replaces the default memory-core plugin in the "memory" slot.
-# Must run BEFORE openclaw doctor so the plugin is on disk when doctor validates.
+# BYTEROVER MEMORY: Install and configure ByteRover CLI when key is provided
+# ByteRover provides local-first knowledge curation via `brv curate`/`brv query`.
+# It runs as an Agent Skill (not a gateway plugin) — tools are injected into
+# the agent's context rather than the gateway config.
+# Powered by gemini-3.1-flash-lite-preview for cost-effective curation.
+# Must run BEFORE openclaw doctor so the skill is on disk when doctor validates.
 # =============================================================================
-HONCHO_KEY="${HONCHO_API_KEY:-}"
-HONCHO_PLUGIN_DIR="$CONFIG_DIR/extensions/openclaw-honcho"
+BYTEROVER_KEY="${BYTEROVER_GEMINI_KEY:-}"
+BYTEROVER_MARKER="$CONFIG_DIR/.byterover-configured"
 
-if [ -n "$HONCHO_KEY" ]; then
-  # Install the plugin if not already present on the data volume
-  if [ ! -d "$HONCHO_PLUGIN_DIR" ]; then
-    # Prefer pre-baked plugin from image (has root ownership, avoids uid=1000 scanner rejection)
-    PREBAKED="/app/prebaked-plugins/openclaw-honcho"
-    if [ -d "$PREBAKED" ]; then
-      echo "[entrypoint] Honcho API key detected — copying pre-baked openclaw-honcho plugin..."
-      mkdir -p "$(dirname "$HONCHO_PLUGIN_DIR")"
-      cp -a "$PREBAKED" "$HONCHO_PLUGIN_DIR"
-      echo "[entrypoint] openclaw-honcho plugin installed (pre-baked)"
+if [ -n "$BYTEROVER_KEY" ]; then
+  # Install byterover-cli globally if not already present
+  if ! command -v brv &>/dev/null; then
+    echo "[entrypoint] ByteRover key detected — installing byterover-cli globally..."
+    if npm install -g byterover-cli 2>&1 | tail -3; then
+      echo "[entrypoint] byterover-cli installed: $(brv --version 2>&1 | head -1)"
     else
-      echo "[entrypoint] Honcho API key detected — installing openclaw-honcho plugin (patched fork)..."
-      OPENCLAW_SCRIPT="/app/openclaw.mjs"
-      if [ -f "$OPENCLAW_SCRIPT" ]; then
-        # Install from patched fork (github:ashneil12/openclaw-honcho-multiagent) which includes
-        # fixes for user message capture, session key routing, and OpenClaw message wrapper parsing.
-        PLUGIN_DEST="$(dirname "$HONCHO_PLUGIN_DIR")"
-        mkdir -p "$PLUGIN_DEST"
-        if git clone --depth=1 https://github.com/ashneil12/openclaw-honcho-multiagent.git "$HONCHO_PLUGIN_DIR" 2>&1 \
-          && (cd "$HONCHO_PLUGIN_DIR" && npm install --omit=dev --ignore-scripts 2>/dev/null); then
-          # Guard: generate openclaw.plugin.json if the fork repo doesn't include it.
-          # Without this manifest, OpenClaw's config validator rejects the plugin and
-          # the gateway crash-loops with "plugin manifest not found".
-          if [ ! -f "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" ]; then
-            echo "[entrypoint] Generating missing openclaw.plugin.json for honcho plugin..."
-            cat > "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" << 'PLUGINJSON'
-{
-  "id": "openclaw-honcho",
-  "kind": "memory",
-  "uiHints": {
-    "apiKey": {
-      "label": "Honcho API Key",
-      "sensitive": true,
-      "placeholder": "hch-v3-...",
-      "help": "API key for Honcho memory service (or use ${HONCHO_API_KEY})"
-    },
-    "baseUrl": {
-      "label": "Base URL",
-      "placeholder": "https://api.honcho.dev",
-      "help": "Honcho API base URL",
-      "advanced": true
-    },
-    "workspaceId": {
-      "label": "Workspace ID",
-      "placeholder": "openclaw",
-      "help": "Honcho workspace/app identifier",
-      "advanced": true
-    }
-  },
-  "configSchema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "apiKey": { "type": "string" },
-      "baseUrl": { "type": "string" },
-      "workspaceId": { "type": "string" }
-    }
-  }
-}
-PLUGINJSON
-          fi
-          echo "[entrypoint] openclaw-honcho plugin installed (patched fork)"
-        else
-          echo "[entrypoint] WARNING: fork install failed, falling back to vanilla npm..."
-          rm -rf "$HONCHO_PLUGIN_DIR"
-          if node "$OPENCLAW_SCRIPT" plugins install @honcho-ai/openclaw-honcho 2>&1; then
-            echo "[entrypoint] openclaw-honcho plugin installed (vanilla npm fallback)"
-          else
-            echo "[entrypoint] WARNING: openclaw-honcho plugin install failed (non-fatal)"
-          fi
-        fi
-      fi
+      echo "[entrypoint] WARNING: byterover-cli install failed (non-fatal — memory curation disabled)"
     fi
   else
-    echo "[entrypoint] openclaw-honcho plugin already installed"
-    # Guard: ensure manifest exists even for pre-existing installs.
-    # The fork repo may be missing openclaw.plugin.json, causing crash loops.
-    if [ ! -f "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" ]; then
-      echo "[entrypoint] Generating missing openclaw.plugin.json for existing honcho plugin..."
-      cat > "$HONCHO_PLUGIN_DIR/openclaw.plugin.json" << 'PLUGINJSON'
-{
-  "id": "openclaw-honcho",
-  "kind": "memory",
-  "uiHints": {
-    "apiKey": {
-      "label": "Honcho API Key",
-      "sensitive": true,
-      "placeholder": "hch-v3-...",
-      "help": "API key for Honcho memory service (or use ${HONCHO_API_KEY})"
-    },
-    "baseUrl": {
-      "label": "Base URL",
-      "placeholder": "https://api.honcho.dev",
-      "help": "Honcho API base URL",
-      "advanced": true
-    },
-    "workspaceId": {
-      "label": "Workspace ID",
-      "placeholder": "openclaw",
-      "help": "Honcho workspace/app identifier",
-      "advanced": true
-    }
-  },
-  "configSchema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "apiKey": { "type": "string" },
-      "baseUrl": { "type": "string" },
-      "workspaceId": { "type": "string" }
-    }
-  }
-}
-PLUGINJSON
+    echo "[entrypoint] byterover-cli already available: $(brv --version 2>&1 | head -1)"
+  fi
+
+  # Configure ByteRover with Gemini provider (idempotent — skip if already done)
+  if command -v brv &>/dev/null && [ ! -f "$BYTEROVER_MARKER" ]; then
+    echo "[entrypoint] Configuring ByteRover with gemini-3.1-flash-lite-preview..."
+    BRV_WORKSPACE="$WORKSPACE_DIR"
+    mkdir -p "$BRV_WORKSPACE"
+
+    # brv init: creates .brv/ context tree in the workspace
+    # brv connect: wires up Gemini as the LLM provider
+    # Both are non-interactive when env vars are set
+    BYTEROVER_GEMINI_KEY="$BYTEROVER_KEY" \
+      brv init --workspace "$BRV_WORKSPACE" --yes 2>&1 \
+      && BYTEROVER_GEMINI_KEY="$BYTEROVER_KEY" \
+        brv connect gemini \
+          --api-key "$BYTEROVER_KEY" \
+          --model "gemini-3.1-flash-lite-preview" \
+          --workspace "$BRV_WORKSPACE" \
+          --yes 2>&1 \
+      && echo "[entrypoint] ByteRover configured with Gemini (gemini-3.1-flash-lite-preview)" \
+           && touch "$BYTEROVER_MARKER" \
+      || echo "[entrypoint] WARNING: ByteRover configuration failed (non-fatal)"
+
+    # Install the OpenClaw connector (Agent Skill) so brv query is available as a tool
+    if command -v brv &>/dev/null; then
+      BYTEROVER_GEMINI_KEY="$BYTEROVER_KEY" \
+        brv connectors install OpenClaw \
+          --workspace "$BRV_WORKSPACE" \
+          --yes 2>&1 \
+        && echo "[entrypoint] ByteRover OpenClaw connector installed" \
+        || echo "[entrypoint] WARNING: ByteRover OpenClaw connector install failed (non-fatal)"
+    fi
+  elif [ -f "$BYTEROVER_MARKER" ]; then
+    echo "[entrypoint] ByteRover already configured (marker exists)"
+    # Re-enforce API key in case it rotated (update .brv config if needed)
+    if command -v brv &>/dev/null; then
+      BYTEROVER_GEMINI_KEY="$BYTEROVER_KEY" \
+        brv connect gemini \
+          --api-key "$BYTEROVER_KEY" \
+          --model "gemini-3.1-flash-lite-preview" \
+          --workspace "$WORKSPACE_DIR" \
+          --yes 2>&1 \
+        || echo "[entrypoint] WARNING: ByteRover key re-enforcement failed (non-fatal)"
     fi
   fi
-
-  # Fix ownership: plugin may have been installed under uid=1000 (legacy node user).
-  # OpenClaw's plugin scanner rejects non-root-owned directories as "suspicious".
-  if [ -d "$HONCHO_PLUGIN_DIR" ]; then
-    chown -R 0:0 "$HONCHO_PLUGIN_DIR" 2>/dev/null || true
-  fi
-
-  # Ensure the plugin config has the current API key (handles key rotation)
-  if [ -s "$CONFIG_FILE" ] && [ -d "$HONCHO_PLUGIN_DIR" ]; then
-    node -e "
-      const fs = require('fs');
-      const config = JSON.parse(fs.readFileSync('$CONFIG_FILE', 'utf8'));
-      const plugins = config.plugins = config.plugins || {};
-      const entries = plugins.entries = plugins.entries || {};
-      const honcho = entries['openclaw-honcho'] = entries['openclaw-honcho'] || {};
-      honcho.enabled = true;
-      honcho.config = honcho.config || {};
-      honcho.config.apiKey = process.env.HONCHO_API_KEY;
-      honcho.config.baseUrl = honcho.config.baseUrl || 'https://api.honcho.dev';
-      // Set Honcho as the memory slot plugin
-      const slots = plugins.slots = plugins.slots || {};
-      slots.memory = 'openclaw-honcho';
-      fs.writeFileSync('$CONFIG_FILE', JSON.stringify(config, null, 2) + '\n');
-    " 2>&1 && echo "[entrypoint] Honcho plugin config enforced" \
-           || echo "[entrypoint] WARNING: Honcho config enforcement failed (non-fatal)"
-  fi
 fi
+
 
 # =============================================================================
 # RUN OPENCLAW DOCTOR: Auto-repair common issues before gateway start

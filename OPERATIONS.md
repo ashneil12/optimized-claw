@@ -34,33 +34,32 @@ If yes → **write it down now.** Don't wait. Don't batch. Don't "plan to write 
 
 **Self-correcting:** When you make a mistake, don't just fix it in chat — write the correction into AGENTS.md so it never happens again. Wrong assumption? Add a rule. Broke something? Add a safety step. User corrected you? Document their preferred method. Your operational files are your playbook — if you keep making the same mistake, your playbook is incomplete.
 
-<!-- HONCHO_ENABLED_START -->
+<!-- BYTEROVER_ENABLED_START -->
 
-### Honcho — Cross-Session Memory Layer
+### ByteRover — Local Knowledge Curation
 
-In addition to file-based memory, you have **Honcho** — an AI-native memory system that automatically observes every conversation and builds a persistent understanding of the user and yourself across sessions. Honcho watches your conversations and extracts preferences, decisions, context, and patterns in the background.
+In addition to file-based memory, you have **ByteRover** (`brv`) — a local-first knowledge curation layer powered by `gemini-3.1-flash-lite-preview`. ByteRover curates important facts from your sessions into a private context tree stored in `.brv/` inside your workspace. It runs entirely on-device — no external calls except to Gemini for curation and querying.
 
-**Honcho supplements your file-based memory — it does not replace it.** Continue writing to memory files as described above. Honcho gives you an additional retrieval layer.
+**ByteRover supplements your file-based memory — it does not replace it.** Continue writing to memory files as described above. ByteRover gives you curated knowledge retrieval across sessions.
 
-#### Honcho Tools
+#### ByteRover Tools
 
 Use these proactively alongside your file-based memory:
 
-| Tool             | When to use                                                                                                      | Speed    |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
-| `honcho_context` | **Start of every session.** Gets the full user representation. Use this first.                                   | ⚡ Fast  |
-| `honcho_search`  | Need to find something specific from past sessions — a decision, a fact, a preference                            | ⚡ Fast  |
-| `honcho_recall`  | Quick factual question: "What language does this user prefer?" "What's their project stack?"                     | 🔄 Light |
-| `honcho_analyze` | Complex synthesis: "What patterns have emerged in our last few sessions?" "How has the user's approach evolved?" | 🧠 Deep  |
+| Tool                     | When to use                                                                                      | Speed    |
+| ------------------------ | ------------------------------------------------------------------------------------------------ | -------- |
+| `brv query "<question>"` | **Start of session / before acting.** Retrieve curated knowledge about user, tasks, preferences. | ⚡ Fast  |
+| `brv curate`             | **End of session / after significant work.** Curate notable facts into the knowledge base.       | 🧠 Smart |
 
-#### When to Reach for Honcho
+#### When to Reach for ByteRover
 
-- **Session start** → `honcho_context` to load up on who this person is
-- **Before making assumptions** → `honcho_recall` or `honcho_search` to check past decisions
-- **When the user references something from before** → `honcho_search` to find it
-- **Self-reflection / heartbeat** → `honcho_analyze` to review your own patterns
-- **When you're unsure about a preference** → `honcho_recall` instead of asking again
-<!-- HONCHO_ENABLED_END -->
+- **Session start** → `brv query "Who is this user and what do they care about?"` to load user context
+- **Before making assumptions** → `brv query "<preference/decision>"` to check past decisions
+- **When user references something from before** → `brv query "<topic>"` to find it fast
+- **End of meaningful session** → `brv curate` to persist what was learned
+- **Self-reflection / heartbeat** → `brv query "What patterns have emerged in recent sessions?"`
+- **When unsure about a preference** → `brv query` instead of asking again
+<!-- BYTEROVER_ENABLED_END -->
 
 <!-- HUMAN_MODE_START -->
 
@@ -186,10 +185,10 @@ The structure is: Current Task → Status → Next Steps → Blockers
 2. **READ** memory/self-review.md for recent patterns (last 7 days)
 3. **READ** memory/open-loops.md for pending follow-ups
 4. If a recent MISS tag overlaps with current task context, force a counter-check
-<!-- HONCHO_ENABLED_START -->
-5. **CALL** `honcho_context` to load user context and your own learned patterns
-6. If the current task is complex or ongoing, **CALL** `honcho_search` for relevant past decisions
-<!-- HONCHO_ENABLED_END -->
+<!-- BYTEROVER_ENABLED_START -->
+5. **CALL** `brv query "Who is this user? What were we working on recently?"` to load curated session knowledge
+6. If the current task is complex or ongoing, **CALL** `brv query "<task description>"` for relevant past decisions
+<!-- BYTEROVER_ENABLED_END -->
 
 > **CRITICAL:** "It was empty last time" is NOT a valid reason to skip a read. Files change between sessions. Always read. Always check. No shortcuts.
 
@@ -229,20 +228,20 @@ Heartbeats are silent by default. You only message the human if action is needed
 
 1. **READ** WORKING.md — Check for in-progress tasks
 2. **READ** memory/self-review.md — Check for MISS patterns (last 7 days)
-<!-- HONCHO_ENABLED_START -->
-3. **CALL** `honcho_analyze` — "What patterns or recurring mistakes should I watch for?"
-<!-- HONCHO_ENABLED_END -->
+<!-- BYTEROVER_ENABLED_START -->
+3. **CALL** `brv query "What patterns or recurring mistakes should I watch for?"` — quick knowledge check
+<!-- BYTEROVER_ENABLED_END -->
 4. **READ** HEARTBEAT.md — Check for scheduled tasks, errors, urgent items
 5. System updates are managed by the MoltBot dashboard. **NEVER run `openclaw update`.** If asked about updates, direct the user to the dashboard.
 6. If Nth heartbeat (based on self-review frequency), run self-review reflection
 
 > **CRITICAL ANTI-SHORTCUT RULE:** You must make a separate `read` tool call for each file above. Do not assume you know what's in a file because you read it before. Files change between heartbeats — user actions, cron jobs, sub-agents, and your own prior work all modify files while you're idle. Skipping a read means missing information.
 
-<!-- HONCHO_ENABLED_START -->
+<!-- BYTEROVER_ENABLED_START -->
 
-> Additionally, do not assume you know what Honcho will return — context changes between heartbeats. Always call `honcho_analyze` for self-review alongside reading your mandatory files.
+> Additionally, do not assume you know what ByteRover will return — curated knowledge changes as sessions are curated. Always call `brv query` at the start of the heartbeat loop.
 
-<!-- HONCHO_ENABLED_END -->
+<!-- BYTEROVER_ENABLED_END -->
 
 > **If you respond with HEARTBEAT_OK without completing all mandatory steps, you are violating your operating rules.**
 

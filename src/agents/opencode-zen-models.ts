@@ -160,6 +160,11 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "gemini-3-flash": 1048576,
   "gpt-5.1-codex-max": 400000,
   "gpt-5.2": 400000,
+  "gpt-5.2-codex": 400000,
+  "gpt-5.3-codex": 400000,
+  "gpt-5.3-codex-spark": 128000,
+  "gpt-5.4": 1050000,
+  "gpt-5.4-pro": 1050000,
 };
 
 function getDefaultContextWindow(modelId: string): number {
@@ -177,6 +182,11 @@ const MODEL_MAX_TOKENS: Record<string, number> = {
   "gemini-3-flash": 65536,
   "gpt-5.1-codex-max": 128000,
   "gpt-5.2": 128000,
+  "gpt-5.2-codex": 128000,
+  "gpt-5.3-codex": 128000,
+  "gpt-5.3-codex-spark": 128000,
+  "gpt-5.4": 128000,
+  "gpt-5.4-pro": 128000,
 };
 
 function getDefaultMaxTokens(modelId: string): number {
