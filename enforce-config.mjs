@@ -11,7 +11,7 @@
 //   models              Enforce model settings (primary, heartbeat, subagent, fallbacks)
 //   gateway             Enforce gateway token
 //   proxies             Enforce trustedProxies CIDR ranges
-//   memory              Enforce QMD memory settings + embedding fallback
+//   memory              Enforce memory backend + embedding provider settings
 //   core                Enforce core runtime settings (gateway port/bind, compaction, etc.)
 //   cron-seed           Seed default cron jobs (only if jobs.json doesn't exist)
 //   browser-profiles    Seed browser profiles for each agent
@@ -494,22 +494,11 @@ function enforceProxies(configPath) {
 }
 
 function enforceMemory(configPath) {
-  if (!isTruthy(env("OPENCLAW_QMD_ENABLED"))) {
-    return;
-  }
-
   const config = readConfig(configPath);
-
-  // QMD as primary backend
   const memory = ensure(config, "memory");
-  memory.backend = "qmd";
   memory.citations = "auto";
-  const qmd = ensure(memory, "qmd");
-  qmd.includeDefaultMemory = true;
-  qmd.update = { interval: "5m", onBoot: true, waitForBootSync: false };
-  qmd.limits = { maxResults: 8, maxSnippetChars: 700, timeoutMs: 5000 };
 
-  // Memory search (session memory + sources)
+  // Memory search common settings (always enforced regardless of backend)
   const defaults = ensure(config, "agents", "defaults");
   const memSearch = ensure(defaults, "memorySearch");
   memSearch.experimental = { sessionMemory: true };
@@ -523,16 +512,40 @@ function enforceMemory(configPath) {
     },
   };
 
-  // Fallback embedding provider (credits mode: gateway proxy)
-  const aiGatewayUrl = env("AI_GATEWAY_URL");
-  const gatewayToken = env("GATEWAY_TOKEN");
-  if (aiGatewayUrl && gatewayToken) {
-    memSearch.provider = "openai";
-    memSearch.model = "voyage/voyage-3.5";
-    memSearch.remote = {
-      baseUrl: `${aiGatewayUrl}/api/gateway`,
-      apiKey: gatewayToken,
-    };
+  if (isTruthy(env("OPENCLAW_QMD_ENABLED"))) {
+    // ── QMD backend (local llama.cpp embeddings) ──────────────────────────
+    memory.backend = "qmd";
+    const qmd = ensure(memory, "qmd");
+    qmd.includeDefaultMemory = true;
+    qmd.update = { interval: "5m", onBoot: true, waitForBootSync: false };
+    qmd.limits = { maxResults: 8, maxSnippetChars: 700, timeoutMs: 5000 };
+
+    // Fallback embedding provider (credits mode: gateway proxy)
+    const aiGatewayUrl = env("AI_GATEWAY_URL");
+    const gatewayToken = env("GATEWAY_TOKEN");
+    if (aiGatewayUrl && gatewayToken) {
+      memSearch.provider = "openai";
+      memSearch.model = "voyage/voyage-3.5";
+      memSearch.remote = {
+        baseUrl: `${aiGatewayUrl}/api/gateway`,
+        apiKey: gatewayToken,
+      };
+    }
+  } else {
+    // ── Builtin backend (remote Gemini embeddings) ────────────────────────
+    memory.backend = "builtin";
+    // Clean up stale QMD config to avoid confusion
+    delete memory.qmd;
+
+    const geminiKey = env("GEMINI_API_KEY");
+    if (geminiKey) {
+      memSearch.provider = "gemini";
+      memSearch.model = "gemini-embedding-2-preview";
+      console.log("[enforce-config] Memory: builtin backend with Gemini embedding-2 (3072-dim)");
+    } else {
+      // No Gemini key — provider stays "auto" (FTS-only fallback)
+      console.log("[enforce-config] Memory: builtin backend (no embedding key — FTS-only)");
+    }
   }
 
   writeConfig(configPath, config);

@@ -160,21 +160,8 @@ if [ ! -f "$CONFIG_FILE" ] || [ "$DISABLE_DEVICE_AUTH" = "true" ] || [ "$DISABLE
   },
   "logging": { "redactSensitive": "tools" }${MODELS_SECTION},
   "memory": {
-    "backend": "qmd",
-    "citations": "auto",
-    "qmd": {
-      "includeDefaultMemory": true,
-      "update": {
-        "interval": "5m",
-        "onBoot": true,
-        "waitForBootSync": false
-      },
-      "limits": {
-        "maxResults": 8,
-        "maxSnippetChars": 700,
-        "timeoutMs": 5000
-      }
-    }
+    "backend": "builtin",
+    "citations": "auto"
   },
   "agents": {
     "defaults": {
@@ -197,6 +184,8 @@ if [ ! -f "$CONFIG_FILE" ] || [ "$DISABLE_DEVICE_AUTH" = "true" ] || [ "$DISABLE
         "keepLastAssistants": 3
       },
       "memorySearch": {
+        "provider": "gemini",
+        "model": "gemini-embedding-2-preview",
         "experimental": { "sessionMemory": true },
         "sources": ["memory", "sessions"]
       },
@@ -523,6 +512,13 @@ fi
 # Must run BEFORE openclaw doctor so the skill is on disk when doctor validates.
 # =============================================================================
 BYTEROVER_KEY="${BYTEROVER_GEMINI_KEY:-}"
+# Expose the ByteRover Gemini key as GEMINI_API_KEY so the builtin memory
+# backend's Gemini embedding provider can use it without custom config.
+# Only set if not already provided (avoid overwriting an explicit key).
+if [ -n "$BYTEROVER_KEY" ] && [ -z "${GEMINI_API_KEY:-}" ]; then
+  export GEMINI_API_KEY="$BYTEROVER_KEY"
+  echo "[entrypoint] GEMINI_API_KEY derived from BYTEROVER_GEMINI_KEY (for memory embeddings)"
+fi
 BYTEROVER_MARKER="$CONFIG_DIR/.byterover-configured"
 
 if [ -n "$BYTEROVER_KEY" ]; then
