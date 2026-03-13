@@ -154,3 +154,28 @@ export function noteIncludeConfinementWarning(snapshot: {
     "Doctor warnings",
   );
 }
+
+export function noteMissingDefaultAgent(cfg: OpenClawConfig): void {
+  const agents = cfg.agents?.list;
+  if (!Array.isArray(agents) || agents.length <= 1) {
+    return;
+  }
+  const hasDefault = agents.some(
+    (agent) => agent && typeof agent === "object" && agent.default === true,
+  );
+  if (hasDefault) {
+    return;
+  }
+  const firstId =
+    agents[0] && typeof agents[0] === "object" && typeof agents[0].id === "string"
+      ? agents[0].id
+      : "unknown";
+  note(
+    [
+      `- ${agents.length} agents are configured but none has default=true.`,
+      `- The system will silently fall back to agents[0] ("${firstId}") for unbound sessions.`,
+      `- Set default=true on the intended main agent to avoid identity confusion.`,
+    ].join("\n"),
+    "Doctor warnings",
+  );
+}

@@ -15,11 +15,11 @@ This document tracks customizations made to this fork compared to upstream `open
 
 ### Security Files
 
-| File | Purpose |
-|------|---------|
-| `ACIP_SECURITY.md` | Full ACIP security rules, deployed as read-only to workspace |
-| `scripts/security-audit.sh` | Comprehensive security audit script |
-| `scripts/check-errors.sh` | Error checking utility |
+| File                        | Purpose                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `ACIP_SECURITY.md`          | Full ACIP security rules, deployed as read-only to workspace |
+| `scripts/security-audit.sh` | Comprehensive security audit script                          |
+| `scripts/check-errors.sh`   | Error checking utility                                       |
 
 ### Security Measures
 
@@ -38,10 +38,10 @@ This document tracks customizations made to this fork compared to upstream `open
 
 The original `SOUL.md` was split into two files:
 
-| File | Purpose | Writability |
-|------|---------|:-----------:|
-| `SOUL.md` | Philosophical guidelines, identity, personality | Read-only |
-| `OPERATIONS.md` | Operational rules, workflows, tool usage | Read-only |
+| File            | Purpose                                         | Writability |
+| --------------- | ----------------------------------------------- | :---------: |
+| `SOUL.md`       | Philosophical guidelines, identity, personality |  Read-only  |
+| `OPERATIONS.md` | Operational rules, workflows, tool usage        |  Read-only  |
 
 ### Related Changes
 
@@ -56,20 +56,20 @@ The original `SOUL.md` was split into two files:
 
 Custom markdown files deployed to agent workspace at startup:
 
-| File | Purpose | Loaded In |
-|------|---------|-----------|
-| `SOUL.md` | Philosophy & identity | System prompt (main agent) |
-| `OPERATIONS.md` | Operational rules | System prompt (main agent) |
-| `AGENTS.md` | Sub-agent delegation rules | System prompt (main agent) |
-| `HEARTBEAT.md` | Lean heartbeat with OTA check | System prompt (main agent) |
-| `IDENTITY.md` | Writable self-evolution file | System prompt (main agent) |
-| `WORKING.md` | Persistent task state template | System prompt (main agent) |
-| `PRACTICAL.md` | Practical guidelines | System prompt (main agent) |
-| `memory-hygiene.md` | Memory hygiene checks | System prompt (main agent) |
-| `ACIP_SECURITY.md` | Full ACIP security rules | Subagent-only |
-| `ralph-loops.md` | Ralph Loops pattern | Deployed, not in main prompt |
-| `howtobehuman.md` | Human mode template | Deployed, optional |
-| `writelikeahuman.md` | Human writing style | Deployed, optional |
+| File                 | Purpose                        | Loaded In                    |
+| -------------------- | ------------------------------ | ---------------------------- |
+| `SOUL.md`            | Philosophy & identity          | System prompt (main agent)   |
+| `OPERATIONS.md`      | Operational rules              | System prompt (main agent)   |
+| `AGENTS.md`          | Sub-agent delegation rules     | System prompt (main agent)   |
+| `HEARTBEAT.md`       | Lean heartbeat with OTA check  | System prompt (main agent)   |
+| `IDENTITY.md`        | Writable self-evolution file   | System prompt (main agent)   |
+| `WORKING.md`         | Persistent task state template | System prompt (main agent)   |
+| `PRACTICAL.md`       | Practical guidelines           | System prompt (main agent)   |
+| `memory-hygiene.md`  | Memory hygiene checks          | System prompt (main agent)   |
+| `ACIP_SECURITY.md`   | Full ACIP security rules       | Subagent-only                |
+| `ralph-loops.md`     | Ralph Loops pattern            | Deployed, not in main prompt |
+| `howtobehuman.md`    | Human mode template            | Deployed, optional           |
+| `writelikeahuman.md` | Human writing style            | Deployed, optional           |
 
 ### Source Files Modified
 
@@ -97,28 +97,28 @@ Deep integration with Honcho memory plugin:
 
 ### Memory Templates
 
-| File | Purpose |
-|------|---------|
-| `templates/memory/diary.md` | Diary entries template |
+| File                                      | Purpose                       |
+| ----------------------------------------- | ----------------------------- |
+| `templates/memory/diary.md`               | Diary entries template        |
 | `templates/memory/identity-scratchpad.md` | Identity evolution scratchpad |
-| `templates/memory/open-loops.md` | Open tasks/loops tracker |
-| `templates/memory/self-review.md` | Self-review template |
-| `templates/progress.md` | Progress tracking template |
+| `templates/memory/open-loops.md`          | Open tasks/loops tracker      |
+| `templates/memory/self-review.md`         | Self-review template          |
+| `templates/progress.md`                   | Progress tracking template    |
 
 ### Memory Source Files
 
-| File | Purpose |
-|------|---------|
+| File                                              | Purpose                            |
+| ------------------------------------------------- | ---------------------------------- |
 | `src/auto-reply/reply/commands-context-memory.ts` | Memory context for command replies |
-| `src/agents/tools/recall-message-tool.ts` | Message recall tool |
+| `src/agents/tools/recall-message-tool.ts`         | Message recall tool                |
 
 ### Config Enforcement
 
-| File | Purpose |
-|------|---------|
-| `enforce-config.mjs` | CLI tool to enforce `openclaw.json` configuration at runtime |
-| `moltbot.mjs` | MoltBot launcher script |
-| `src/config/defaults.ts` | Modified defaults for memoryFlush, sessionMemory |
+| File                     | Purpose                                                      |
+| ------------------------ | ------------------------------------------------------------ |
+| `enforce-config.mjs`     | CLI tool to enforce `openclaw.json` configuration at runtime |
+| `moltbot.mjs`            | MoltBot launcher script                                      |
+| `src/config/defaults.ts` | Modified defaults for memoryFlush, sessionMemory             |
 
 ---
 
@@ -133,12 +133,12 @@ Deep integration with Honcho memory plugin:
 
 ## Cron Jobs
 
-| File | Purpose |
-|------|---------|
-| `cron/default-jobs.json` | Default cron job definitions (memory hygiene check every 24h) |
-| `src/cron/trigger-runner.ts` | Cron trigger execution runner |
-| `skills/cron-trigger/SKILL.md` | Cron trigger skill documentation |
-| `docker-entrypoint.sh` | Seeds cron jobs on container startup |
+| File                           | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| `cron/default-jobs.json`       | Default cron job definitions (memory hygiene check every 24h) |
+| `src/cron/trigger-runner.ts`   | Cron trigger execution runner                                 |
+| `skills/cron-trigger/SKILL.md` | Cron trigger skill documentation                              |
+| `docker-entrypoint.sh`         | Seeds cron jobs on container startup                          |
 
 ---
 
@@ -146,14 +146,14 @@ Deep integration with Honcho memory plugin:
 
 Custom visual browser sidecar for agent browsing:
 
-| File | Purpose |
-|------|---------|
-| `Dockerfile.sandbox-browser` | Chromium + VNC + proxy Docker image |
-| `scripts/sandbox-browser-entrypoint.sh` | Entrypoint for browser sidecar |
-| `src/agents/sandbox/browser.ts` | Browser sandbox configuration |
-| `src/browser/cdp.helpers.ts` | CDP helpers (static imports, `http.request` for Host header bypass) |
-| `src/browser/chrome.ts` | Chrome launcher config |
-| `src/browser/client-fetch.ts` | Browser client fetch |
+| File                                    | Purpose                                                             |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `Dockerfile.sandbox-browser`            | Chromium + VNC + proxy Docker image                                 |
+| `scripts/sandbox-browser-entrypoint.sh` | Entrypoint for browser sidecar                                      |
+| `src/agents/sandbox/browser.ts`         | Browser sandbox configuration                                       |
+| `src/browser/cdp.helpers.ts`            | CDP helpers (static imports, `http.request` for Host header bypass) |
+| `src/browser/chrome.ts`                 | Chrome launcher config                                              |
+| `src/browser/client-fetch.ts`           | Browser client fetch                                                |
 
 ### Key changes
 
@@ -168,15 +168,15 @@ Custom visual browser sidecar for agent browsing:
 
 ## Gateway & BYOK
 
-| File | Purpose |
-|------|---------|
-| `src/gateway/control-ui.ts` | Control UI bypass for scoped connections |
-| `src/gateway/net.ts` | Network configuration |
-| `src/gateway/session-utils.ts` | Session utilities |
-| `src/gateway/server-methods/agents.ts` | Agent server methods |
-| `src/gateway/server/ws-connection/message-handler.ts` | WebSocket message handler |
-| `src/agents/minimax-vlm.ts` | MiniMax VLM integration |
-| `src/media-understanding/providers/image.ts` | Image provider for VLM |
+| File                                                  | Purpose                                  |
+| ----------------------------------------------------- | ---------------------------------------- |
+| `src/gateway/control-ui.ts`                           | Control UI bypass for scoped connections |
+| `src/gateway/net.ts`                                  | Network configuration                    |
+| `src/gateway/session-utils.ts`                        | Session utilities                        |
+| `src/gateway/server-methods/agents.ts`                | Agent server methods                     |
+| `src/gateway/server/ws-connection/message-handler.ts` | WebSocket message handler                |
+| `src/agents/minimax-vlm.ts`                           | MiniMax VLM integration                  |
+| `src/media-understanding/providers/image.ts`          | Image provider for VLM                   |
 
 ### Key changes
 
@@ -190,30 +190,30 @@ Custom visual browser sidecar for agent browsing:
 
 ### Docker
 
-| File | What Changed |
-|------|-------------|
-| `Dockerfile` | Hardened container, baked-in camofox plugin, clawdhub CLI pre-installed, QMD global install, bootstrap file COPY commands |
-| `docker-compose.coolify.yml` | Coolify deployment config (port 18789, env vars, volumes) |
-| `docker-entrypoint.sh` | ACIP fetching, config generation, routing rules, cron seed, template deployment, log dir creation, gateway symlinks |
+| File                         | What Changed                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `Dockerfile`                 | Hardened container, baked-in camofox plugin, clawdhub CLI pre-installed, QMD global install, bootstrap file COPY commands |
+| `docker-compose.coolify.yml` | Coolify deployment config (port 18789, env vars, volumes)                                                                 |
+| `docker-entrypoint.sh`       | ACIP fetching, config generation, routing rules, cron seed, template deployment, log dir creation, gateway symlinks       |
 
 ### CI
 
-| File | What Changed |
-|------|-------------|
-| `.github/workflows/ci.yml` | Replaced defunct Blacksmith runners with GitHub-hosted |
-| `.github/workflows/docker-release.yml` | Optimized for amd64-only (dropped arm64 QEMU) |
-| `.github/workflows/docker-build.yml` | **NEW** — GHCR image push workflow |
+| File                                   | What Changed                                           |
+| -------------------------------------- | ------------------------------------------------------ |
+| `.github/workflows/ci.yml`             | Replaced defunct Blacksmith runners with GitHub-hosted |
+| `.github/workflows/docker-release.yml` | Optimized for amd64-only (dropped arm64 QEMU)          |
+| `.github/workflows/docker-build.yml`   | **NEW** — GHCR image push workflow                     |
 
 ---
 
 ## Skills & Plugins
 
-| Directory/File | Purpose |
-|---------|---------|
-| `skills/clawdhub/SKILL.md` | Clawdhub CLI skill |
-| `skills/cron-trigger/SKILL.md` | Cron trigger skill |
-| `skills/local-places/` | Local places MCP server (Google Places integration) |
-| `extensions/` | Plugin manifests for various platforms (Discord, Telegram, Slack, etc.) |
+| Directory/File                 | Purpose                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `skills/clawdhub/SKILL.md`     | Clawdhub CLI skill                                                      |
+| `skills/cron-trigger/SKILL.md` | Cron trigger skill                                                      |
+| `skills/local-places/`         | Local places MCP server (Google Places integration)                     |
+| `extensions/`                  | Plugin manifests for various platforms (Discord, Telegram, Slack, etc.) |
 
 ---
 
@@ -221,38 +221,38 @@ Custom visual browser sidecar for agent browsing:
 
 ### Core Agent
 
-| File | What Changed |
-|------|-------------|
-| `src/agents/system-prompt.ts` | Bootstrap file blurbs, runtime environment info |
-| `src/agents/workspace.ts` | Bootstrap file loading, Honcho conditional markers, file ordering |
-| `src/agents/cli-runner.ts` | CLI runner modifications |
-| `src/agents/pi-embedded-helpers/bootstrap.ts` | Bootstrap helper changes |
-| `src/agents/pi-embedded-runner/compact.ts` | Compaction event handling |
-| `src/agents/pi-embedded-runner/run/attempt.ts` | Run attempt modifications |
-| `src/agents/pi-embedded-subscribe.handlers.messages.ts` | Message handler updates |
-| `src/agents/pi-tools.ts` | Tool definitions |
-| `src/agents/moltbot-tools.ts` | **NEW** — MoltBot-specific tools |
-| `src/agents/tools/web-search.ts` | Web search markup improvements |
+| File                                                    | What Changed                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `src/agents/system-prompt.ts`                           | Bootstrap file blurbs, runtime environment info                   |
+| `src/agents/workspace.ts`                               | Bootstrap file loading, Honcho conditional markers, file ordering |
+| `src/agents/cli-runner.ts`                              | CLI runner modifications                                          |
+| `src/agents/pi-embedded-helpers/bootstrap.ts`           | Bootstrap helper changes                                          |
+| `src/agents/pi-embedded-runner/compact.ts`              | Compaction event handling                                         |
+| `src/agents/pi-embedded-runner/run/attempt.ts`          | Run attempt modifications                                         |
+| `src/agents/pi-embedded-subscribe.handlers.messages.ts` | Message handler updates                                           |
+| `src/agents/pi-tools.ts`                                | Tool definitions                                                  |
+| `src/agents/moltbot-tools.ts`                           | **NEW** — MoltBot-specific tools                                  |
+| `src/agents/tools/web-search.ts`                        | Web search markup improvements                                    |
 
 ### Infrastructure
 
-| File | What Changed |
-|------|-------------|
-| `src/entry.ts` | Entry point modifications |
-| `src/infra/moltbot-root.ts` | **NEW** — MoltBot root infrastructure |
-| `src/security/scheduler.ts` | **NEW** — Security scheduler |
-| `src/context/index.ts` | **NEW** — Context module |
-| `src/config/schema.field-metadata.ts` | **NEW** — Config field metadata |
-| `src/config/types.clawdbot.ts` | **NEW** — ClawdBot config types |
-| `src/config/types.feishu.ts` | **NEW** — Feishu config types |
-| `src/daemon/legacy.ts` | **NEW** — Legacy daemon support |
+| File                                  | What Changed                          |
+| ------------------------------------- | ------------------------------------- |
+| `src/entry.ts`                        | Entry point modifications             |
+| `src/infra/moltbot-root.ts`           | **NEW** — MoltBot root infrastructure |
+| `src/security/scheduler.ts`           | **NEW** — Security scheduler          |
+| `src/context/index.ts`                | **NEW** — Context module              |
+| `src/config/schema.field-metadata.ts` | **NEW** — Config field metadata       |
+| `src/config/types.clawdbot.ts`        | **NEW** — ClawdBot config types       |
+| `src/config/types.feishu.ts`          | **NEW** — Feishu config types         |
+| `src/daemon/legacy.ts`                | **NEW** — Legacy daemon support       |
 
 ### Feishu Plugin
 
-| File | Purpose |
-|------|---------|
-| `src/feishu/*.ts` | **NEW** — Full Feishu (Lark) messaging integration (12 files: access, accounts, bot, client, config, domain, download, format, index, message, monitor, pairing-store, probe, send, streaming-card, types) |
-| `extensions/feishu/README.md` | Feishu plugin documentation |
+| File                          | Purpose                                                                                                                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/feishu/*.ts`             | **NEW** — Full Feishu (Lark) messaging integration (12 files: access, accounts, bot, client, config, domain, download, format, index, message, monitor, pairing-store, probe, send, streaming-card, types) |
+| `extensions/feishu/README.md` | Feishu plugin documentation                                                                                                                                                                                |
 
 ---
 
@@ -260,35 +260,35 @@ Custom visual browser sidecar for agent browsing:
 
 > These are local scaffolds, not deployed via Docker.
 
-| Directory | Purpose |
-|-----------|---------|
-| `apps/android/` | Android app (Kotlin) — MoltBot mobile client |
+| Directory                 | Purpose                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| `apps/android/`           | Android app (Kotlin) — MoltBot mobile client                                               |
 | `apps/shared/MoltbotKit/` | Shared Swift framework — iOS/macOS client (chat UI, gateway protocol, TTS, canvas, camera) |
 
 ---
 
 ## UI Customizations
 
-| File | What Changed |
-|------|-------------|
-| `ui/src/ui/views/overview.ts` | Overview page modifications |
-| `ui/src/styles/chat/sidebar.css` | Mobile sidebar styles |
-| `ui/src/styles/layout.mobile.css` | Mobile layout styles |
+| File                              | What Changed                |
+| --------------------------------- | --------------------------- |
+| `ui/src/ui/views/overview.ts`     | Overview page modifications |
+| `ui/src/styles/chat/sidebar.css`  | Mobile sidebar styles       |
+| `ui/src/styles/layout.mobile.css` | Mobile layout styles        |
 
 ---
 
 ## Miscellaneous Scripts & Files
 
-| File | Purpose |
-|------|---------|
-| `scripts/check-open-loops.py` | Open loops checker |
-| `scripts/format-staged.js` | Pre-commit formatting |
-| `scripts/postinstall.js` | Post-install script |
-| `scripts/setup-git-hooks.js` | Git hooks setup |
+| File                                      | Purpose                              |
+| ----------------------------------------- | ------------------------------------ |
+| `scripts/check-open-loops.py`             | Open loops checker                   |
+| `scripts/format-staged.js`                | Pre-commit formatting                |
+| `scripts/postinstall.js`                  | Post-install script                  |
+| `scripts/setup-git-hooks.js`              | Git hooks setup                      |
 | `scripts/systemd/clawdbot-auth-monitor.*` | Auth monitor systemd service + timer |
-| `docs/CREDIT_SYSTEM.md` | Credit system documentation |
-| `docs/start/clawd.md` | Getting started guide |
-| `docs/tools/clawdhub.md` | Clawdhub documentation |
+| `docs/CREDIT_SYSTEM.md`                   | Credit system documentation          |
+| `docs/start/clawd.md`                     | Getting started guide                |
+| `docs/tools/clawdhub.md`                  | Clawdhub documentation               |
 
 ---
 
@@ -296,33 +296,33 @@ Custom visual browser sidecar for agent browsing:
 
 Files that should always keep local version during updates:
 
-| File | Reason |
-|------|--------|
-| `docker-compose.coolify.yml` | Coolify deployment configuration |
-| `docker-entrypoint.sh` | Custom initialization logic (ACIP, config gen, cron seed, template deploy) |
-| `Dockerfile` | Hardened container (camofox, clawdhub, QMD, bootstrap files) |
-| `Dockerfile.sandbox-browser` | Custom browser sidecar |
-| `SOUL.md` | MoltBot philosophical identity |
-| `OPERATIONS.md` | MoltBot operational rules |
-| `AGENTS.md` | Sub-agent delegation rules with Honcho conditionals |
-| `ACIP_SECURITY.md` | Full ACIP security rules |
-| `IDENTITY.md` | Writable self-evolution file |
-| `WORKING.md` | Persistent task state template |
-| `HEARTBEAT.md` | Lean heartbeat instructions with OTA check |
-| `PRACTICAL.md` | Practical guidelines |
-| `memory-hygiene.md` | Memory hygiene checks |
-| `ralph-loops.md` | Ralph Loops pattern |
-| `templates/` | Memory templates (self-review, open-loops, diary, identity-scratchpad, progress) |
-| `scripts/check-open-loops.py` | Open loops checker |
-| `scripts/security-audit.sh` | Security audit |
-| `enforce-config.mjs` | Config enforcement CLI |
-| `moltbot.mjs` | MoltBot launcher |
-| `cron/default-jobs.json` | Default cron job definitions |
-| `skills/` | Custom skills (clawdhub, cron-trigger, local-places) |
-| `src/agents/moltbot-tools.ts` | MoltBot-specific tools |
-| `src/infra/moltbot-root.ts` | MoltBot root infrastructure |
-| `src/feishu/` | Feishu plugin (entire directory) |
-| `.github/workflows/docker-build.yml` | GHCR push workflow |
+| File                                 | Reason                                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| `docker-compose.coolify.yml`         | Coolify deployment configuration                                                 |
+| `docker-entrypoint.sh`               | Custom initialization logic (ACIP, config gen, cron seed, template deploy)       |
+| `Dockerfile`                         | Hardened container (camofox, clawdhub, QMD, bootstrap files)                     |
+| `Dockerfile.sandbox-browser`         | Custom browser sidecar                                                           |
+| `SOUL.md`                            | MoltBot philosophical identity                                                   |
+| `OPERATIONS.md`                      | MoltBot operational rules                                                        |
+| `AGENTS.md`                          | Sub-agent delegation rules with Honcho conditionals                              |
+| `ACIP_SECURITY.md`                   | Full ACIP security rules                                                         |
+| `IDENTITY.md`                        | Writable self-evolution file                                                     |
+| `WORKING.md`                         | Persistent task state template                                                   |
+| `HEARTBEAT.md`                       | Lean heartbeat instructions with OTA check                                       |
+| `PRACTICAL.md`                       | Practical guidelines                                                             |
+| `memory-hygiene.md`                  | Memory hygiene checks                                                            |
+| `ralph-loops.md`                     | Ralph Loops pattern                                                              |
+| `templates/`                         | Memory templates (self-review, open-loops, diary, identity-scratchpad, progress) |
+| `scripts/check-open-loops.py`        | Open loops checker                                                               |
+| `scripts/security-audit.sh`          | Security audit                                                                   |
+| `enforce-config.mjs`                 | Config enforcement CLI                                                           |
+| `moltbot.mjs`                        | MoltBot launcher                                                                 |
+| `cron/default-jobs.json`             | Default cron job definitions                                                     |
+| `skills/`                            | Custom skills (clawdhub, cron-trigger, local-places)                             |
+| `src/agents/moltbot-tools.ts`        | MoltBot-specific tools                                                           |
+| `src/infra/moltbot-root.ts`          | MoltBot root infrastructure                                                      |
+| `src/feishu/`                        | Feishu plugin (entire directory)                                                 |
+| `.github/workflows/docker-build.yml` | GHCR push workflow                                                               |
 
 ---
 
@@ -382,32 +382,66 @@ These changes are in the **dashboard** repo, not the OpenClaw source. Documented
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/lib/constants/presets.ts` | Token Economy preset definitions (Cost-Saving, Power modes) |
-| `src/lib/types/instance.ts` | ModelRoutingConfig with image support, HeartbeatInterval type |
-| `src/lib/services/instance-env.ts` | Instance environment configuration |
+| File                               | Purpose                                                       |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `src/lib/constants/presets.ts`     | Token Economy preset definitions (Cost-Saving, Power modes)   |
+| `src/lib/types/instance.ts`        | ModelRoutingConfig with image support, HeartbeatInterval type |
+| `src/lib/services/instance-env.ts` | Instance environment configuration                            |
 
 ### Preset Definitions
 
-| Preset | Models | Cost Est |
-|--------|--------|----------|
-| Cost-Saving | Kimi K2.5, Minimax 2.1, DeepSeek V3, Gemini Flash, Haiku | ~$25-80/mo |
-| Power | Claude Opus 4.5, Codex GPT 5.2, Haiku | ~$500-1000/mo |
+| Preset      | Models                                                   | Cost Est      |
+| ----------- | -------------------------------------------------------- | ------------- |
+| Cost-Saving | Kimi K2.5, Minimax 2.1, DeepSeek V3, Gemini Flash, Haiku | ~$25-80/mo    |
+| Power       | Claude Opus 4.5, Codex GPT 5.2, Haiku                    | ~$500-1000/mo |
 
 ---
 
 ## Update History
 
-| Date | Upstream Commit | Notes |
-|------|-----------------|-------|
-| 2026-02-21 | `upstream/main` @ `ddcb2d79b` (v2026.2.21) | Merge 285 upstream commits. 20+ security fixes (command gating, sandbox browser, WhatsApp auth, compaction limits). New: Gemini 3.1, Volcengine/Byteplus provider, thread-bound Discord subagents. MiniMax M2.5 pricing fix. Massive dead-code cleanup (-82K lines). ACIP preserved. Soul-evil confirmed absent. |
-| 2026-02-19 | `upstream/main` @ `87d833115` | Merge 1,074 upstream commits. Soul-evil already removed upstream. ACIP preserved. |
-| 2026-02-19 | — | SOUL/OPERATIONS split, bootstrap files (PRACTICAL.md, memory-hygiene.md), context pruning (cache-ttl 6h), cron jobs (24h memory hygiene), Honcho additive mode |
-| 2026-02-17 | — | Deep Honcho integration, SOUL.md overhaul, memory flush, compaction events |
-| 2026-02-15 | — | Browser sidecar (Chromium+VNC), CDP fixes, gateway proxy, VLM integration |
-| 2026-02-14 | — | Enforce-config CLI, web search markup, clawdhub CLI, Brave search proxy |
-| 2026-02-13 | — | Plugin Safety Protocol, config path correction, context pruning, OTA protocol, Ralph Loops |
-| 2026-02-12 | — | OTA update system, clean-slate context rebuild, soul-evil scorched earth |
-| 2026-02-11 | — | Persistent storage fix, ACIP, QMD memory, model routing |
-| 2026-02-04 | — | Token Economy dashboard, orchestrator pattern |
+| Date       | Upstream Commit                            | Notes                                                                                                                                                                                                                                                                                                                                             |
+| ---------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-03-12 | `upstream/main` @ `46cb73da3` (v2026.3.11) | Merged 259 commits. Security: device token scoping, exec format char escaping, GIT_EXEC_PATH block, profile mutation block, sandboxed session_status. New: dashboard-v2 chat infra, Telegram exec-approval buttons, LLM thinking override. **Breaking:** device scope baseline enforcement — mitigated by `docker-entrypoint.sh` migration block. |
+| 2026-02-21 | `upstream/main` @ `ddcb2d79b` (v2026.2.21) | Merge 285 upstream commits. 20+ security fixes (command gating, sandbox browser, WhatsApp auth, compaction limits). New: Gemini 3.1, Volcengine/Byteplus provider, thread-bound Discord subagents. MiniMax M2.5 pricing fix. Massive dead-code cleanup (-82K lines). ACIP preserved. Soul-evil confirmed absent.                                  |
+| 2026-02-19 | `upstream/main` @ `87d833115`              | Merge 1,074 upstream commits. Soul-evil already removed upstream. ACIP preserved.                                                                                                                                                                                                                                                                 |
+| 2026-02-19 | —                                          | SOUL/OPERATIONS split, bootstrap files (PRACTICAL.md, memory-hygiene.md), context pruning (cache-ttl 6h), cron jobs (24h memory hygiene), Honcho additive mode                                                                                                                                                                                    |
+| 2026-02-17 | —                                          | Deep Honcho integration, SOUL.md overhaul, memory flush, compaction events                                                                                                                                                                                                                                                                        |
+| 2026-02-15 | —                                          | Browser sidecar (Chromium+VNC), CDP fixes, gateway proxy, VLM integration                                                                                                                                                                                                                                                                         |
+| 2026-02-14 | —                                          | Enforce-config CLI, web search markup, clawdhub CLI, Brave search proxy                                                                                                                                                                                                                                                                           |
+| 2026-02-13 | —                                          | Plugin Safety Protocol, config path correction, context pruning, OTA protocol, Ralph Loops                                                                                                                                                                                                                                                        |
+| 2026-02-12 | —                                          | OTA update system, clean-slate context rebuild, soul-evil scorched earth                                                                                                                                                                                                                                                                          |
+| 2026-02-11 | —                                          | Persistent storage fix, ACIP, QMD memory, model routing                                                                                                                                                                                                                                                                                           |
+| 2026-02-04 | —                                          | Token Economy dashboard, orchestrator pattern                                                                                                                                                                                                                                                                                                     |
+
+---
+
+## Upstream Sync Risks
+
+> [!IMPORTANT]
+> During every upstream merge, check for **infra security changes** that silently break runtime state. These are particularly dangerous for SaaS deployments because they affect existing data, not just code.
+
+### Pattern: Runtime Data Migrations
+
+Some upstream security changes modify how persisted data is interpreted. Existing data from before the change becomes invalid without a migration.
+
+**Mitigation:** Add an idempotent migration block to `docker-entrypoint.sh` that auto-heals the issue on container restart. See the device scope baseline migration (2026-03-12) as the canonical pattern.
+
+### Known Breaking History
+
+| Upstream Change                                                             | Impact                                                                                  | Mitigation in `docker-entrypoint.sh`                                   |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| "Infra: fail closed without device scope baseline" (`d8d8dc742`, 2026.3.11) | Existing paired devices missing `approvedScopes` rejected as "device identity required" | Backfill `approvedScopes: ["operator.admin"]` on every container start |
+
+### Checklist for Future Syncs
+
+When reviewing upstream commits before merging, specifically grep for:
+
+```bash
+# Check for device/token/scope security changes
+git log upstream/main --oneline | grep -i "device\|scope\|baseline\|token\|pairing"
+
+# Check for data-format changes in infra files
+git diff HEAD..upstream/main -- src/infra/ src/gateway/server.auth* | grep "^+" | head -40
+```
+
+If upstream changes how any persisted JSON is validated (devices, sessions, tokens, config), add an idempotent migration to `docker-entrypoint.sh`.

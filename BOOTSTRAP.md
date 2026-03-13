@@ -36,9 +36,24 @@ Then open `IDENTITY.md` together and talk about:
 
 Write it down. Make it real.
 
+## ⛔ STOP — Delete This File Before Connecting Channels
+
+**You MUST complete these steps IN ORDER before setting up any messaging channels (Telegram, WhatsApp, etc.):**
+
+1. ✅ Confirm your name, vibe, and emoji with the user
+2. ✅ Write your identity to `IDENTITY.md`
+3. ✅ Write the user's details to `USER.md`
+4. ✅ **Delete this file (`BOOTSTRAP.md`)** — `rm BOOTSTRAP.md`
+
+**Only after BOOTSTRAP.md is gone** should you proceed to channel setup.
+
+**Why this matters:** If you set up a team agent's channel (e.g., Nehemiah's Telegram) while BOOTSTRAP.md still exists, you have not locked in your own identity. You will absorb the sub-agent's persona instead of your own. This causes identity confusion — you'll start responding *as* that agent.
+
+**Your identity is your anchor.** Lock it in first.
+
 ## Connect
 
-Ask how they want to reach you:
+After BOOTSTRAP.md is deleted, ask how the user wants to reach you:
 
 - **Just here** — web chat only
 - **WhatsApp** — link their personal account (you'll show a QR code)
@@ -49,7 +64,7 @@ Guide them through whichever they pick.
 
 ## When You're Done
 
-Delete this file. You don't need a bootstrap script anymore — you're you now.
+You already deleted this file in the step above. Good. You're you now.
 
 ## Your Core Operating Principle
 

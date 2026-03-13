@@ -1,9 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../config/config.js";
 import {
   formatConfigPath,
+  noteMissingDefaultAgent,
   resolveConfigPathTarget,
   stripUnknownConfigKeys,
 } from "./doctor-config-analysis.js";
+
+vi.mock("../terminal/note.js", () => ({
+  note: vi.fn(),
+}));
+
+import { note } from "../terminal/note.js";
+const noteMock = note as ReturnType<typeof vi.fn>;
 
 describe("doctor config analysis helpers", () => {
   it("formats config paths predictably", () => {
@@ -30,5 +39,59 @@ describe("doctor config analysis helpers", () => {
     expect(result.removed).toContain("unexpected");
     expect((result.config as Record<string, unknown>).unexpected).toBeUndefined();
     expect((result.config as Record<string, unknown>).hooks).toEqual({});
+  });
+});
+
+describe("noteMissingDefaultAgent", () => {
+  it("warns when multiple agents have no default", () => {
+    noteMock.mockClear();
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "ocs-nehemiah" },
+          { id: "mm-ezra" },
+        ],
+      },
+    };
+    noteMissingDefaultAgent(cfg);
+    expect(noteMock).toHaveBeenCalledWith(
+      expect.stringContaining('none has default=true'),
+      "Doctor warnings",
+    );
+    expect(noteMock).toHaveBeenCalledWith(
+      expect.stringContaining('"ocs-nehemiah"'),
+      expect.any(String),
+    );
+  });
+
+  it("does not warn when an agent has default=true", () => {
+    noteMock.mockClear();
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "main", default: true },
+          { id: "ocs-nehemiah" },
+        ],
+      },
+    };
+    noteMissingDefaultAgent(cfg);
+    expect(noteMock).not.toHaveBeenCalled();
+  });
+
+  it("does not warn for a single agent", () => {
+    noteMock.mockClear();
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [{ id: "solo" }],
+      },
+    };
+    noteMissingDefaultAgent(cfg);
+    expect(noteMock).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when no agents list exists", () => {
+    noteMock.mockClear();
+    noteMissingDefaultAgent({});
+    expect(noteMock).not.toHaveBeenCalled();
   });
 });

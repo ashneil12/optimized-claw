@@ -54,7 +54,18 @@ git log main..upstream/main --pretty=format:"%s" --no-merges -n 50
 2. Summarize in plain English what upstream changed
 3. Highlight anything that looks like it could affect security or core functionality
 
----
+**Critical: Runtime Data Migration Check** — grep upstream commits for infra changes that silently break existing runtime state:
+
+```bash
+# Check for device/token/scope security changes that affect persisted data
+git log main..upstream/main --oneline | grep -i "device\|scope\|baseline\|token\|pairing\|session\|auth"
+
+# Inspect infra diffs for data-format changes
+git diff main..upstream/main -- src/infra/ src/gateway/server.auth* | grep "^+" | head -40
+```
+
+> [!CAUTION]
+> If upstream changes how any persisted JSON is validated (devices, sessions, tokens, config), **a migration block must be added to `docker-entrypoint.sh`** before deploying. See the "Upstream Sync Risks" section in `OPENCLAW_CONTEXT.md` for the canonical pattern and known history.
 
 ## Phase 3: Conflict Detection
 

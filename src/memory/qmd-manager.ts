@@ -45,6 +45,35 @@ const QMD_EMBED_BACKOFF_MAX_MS = 60 * 60 * 1000;
 const HAN_SCRIPT_RE = /[\u3400-\u9fff]/u;
 const QMD_BM25_HAN_KEYWORD_LIMIT = 12;
 
+/**
+ * Basenames of identity-defining files that should not leak across agent
+ * boundaries.  When these files live under an `agents/` subdirectory they
+ * belong to a sub-agent, not the querying agent.
+ */
+const SUB_AGENT_IDENTITY_BASENAMES = new Set([
+  "identity.md",
+  "soul.md",
+  "user.md",
+  "memory.md",
+]);
+
+const SUB_AGENT_PATH_PREFIX_RE = /^agents[/\\]/i;
+
+/**
+ * Returns true when `relPath` points to an identity-defining file inside a
+ * sub-agent workspace (e.g. `agents/ocs-nehemiah/IDENTITY.md`).  Other files
+ * under `agents/` (business docs, knowledge, etc.) return false and remain
+ * searchable.
+ */
+/** @internal Exported for unit testing only. */
+export function isSubAgentIdentityPath(relPath: string): boolean {
+  if (!SUB_AGENT_PATH_PREFIX_RE.test(relPath)) {
+    return false;
+  }
+  const basename = path.basename(relPath).toLowerCase();
+  return SUB_AGENT_IDENTITY_BASENAMES.has(basename);
+}
+
 let qmdEmbedQueueTail: Promise<void> = Promise.resolve();
 
 function hasHanScript(value: string): boolean {
@@ -876,6 +905,13 @@ export class QmdMemoryManager implements MemorySearchManager {
       });
       const doc = await this.resolveDocLocation(entry.docid, docHints);
       if (!doc) {
+        continue;
+      }
+      // Prevent sub-agent identity files from leaking into the main agent's
+      // search results.  Business docs, knowledge files, and other content under
+      // agents/*/ remain fully searchable — only identity-defining files are
+      // filtered to avoid persona confusion.
+      if (isSubAgentIdentityPath(doc.rel)) {
         continue;
       }
       const snippet = entry.snippet?.slice(0, this.qmd.limits.maxSnippetChars) ?? "";

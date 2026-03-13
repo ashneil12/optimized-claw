@@ -52,6 +52,7 @@ import { note } from "../terminal/note.js";
 import { resolveHomeDir } from "../utils.js";
 import {
   formatConfigPath,
+  noteMissingDefaultAgent,
   noteIncludeConfinementWarning,
   noteOpencodeProviderOverrides,
   resolveConfigPathTarget,
@@ -1989,6 +1990,7 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
   }
 
   noteOpencodeProviderOverrides(cfg);
+  noteMissingDefaultAgent(cfg);
 
   return {
     cfg,

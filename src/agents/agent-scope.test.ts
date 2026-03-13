@@ -11,6 +11,7 @@ import {
   resolveAgentWorkspaceDir,
   resolveAgentIdByWorkspacePath,
   resolveAgentIdsByWorkspacePath,
+  resolveDefaultAgentId,
 } from "./agent-scope.js";
 
 afterEach(() => {
@@ -317,5 +318,49 @@ describe("resolveAgentIdsByWorkspacePath", () => {
       "ops",
       "main",
     ]);
+  });
+});
+
+describe("resolveDefaultAgentId", () => {
+  it("returns DEFAULT_AGENT_ID when no agents are configured", () => {
+    const result = resolveDefaultAgentId({});
+    expect(result).toBe("main");
+  });
+
+  it("returns agents[0] when no agent has default=true", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "ocs-nehemiah" },
+          { id: "mm-ezra" },
+        ],
+      },
+    };
+    const result = resolveDefaultAgentId(cfg);
+    expect(result).toBe("ocs-nehemiah");
+  });
+
+  it("returns the agent with default=true", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [
+          { id: "ocs-nehemiah" },
+          { id: "main-agent", default: true },
+          { id: "mm-ezra" },
+        ],
+      },
+    };
+    const result = resolveDefaultAgentId(cfg);
+    expect(result).toBe("main-agent");
+  });
+
+  it("returns the only agent when a single agent is configured", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        list: [{ id: "solo" }],
+      },
+    };
+    const result = resolveDefaultAgentId(cfg);
+    expect(result).toBe("solo");
   });
 });

@@ -79,6 +79,15 @@ export function resolveDefaultAgentId(cfg: OpenClawConfig): string {
     defaultAgentWarned = true;
     log.warn("Multiple agents marked default=true; using the first entry as default.");
   }
+  if (defaults.length === 0 && agents.length > 1 && !defaultAgentWarned) {
+    defaultAgentWarned = true;
+    const fallbackId = agents[0]?.id ?? DEFAULT_AGENT_ID;
+    log.warn(
+      `No agent has default=true but ${agents.length} agents are configured; ` +
+        `falling back to agents[0] ("${fallbackId}"). ` +
+        `Set default=true on the intended main agent to avoid identity confusion.`,
+    );
+  }
   const chosen = (defaults[0] ?? agents[0])?.id?.trim();
   return normalizeAgentId(chosen || DEFAULT_AGENT_ID);
 }
