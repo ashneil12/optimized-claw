@@ -57,7 +57,6 @@ fun ChatMessageBubble(message: ChatMessage) {
   val role = message.role.trim().lowercase(Locale.US)
   val style = bubbleStyle(role)
 
-<<<<<<< HEAD
   // Filter to only displayable content parts (text with content, or base64 images).
   val displayableContent =
     message.content.filter { part ->
@@ -81,19 +80,6 @@ private fun ChatBubbleContainer(
   modifier: Modifier = Modifier,
   content: @Composable () -> Unit,
 ) {
-=======
-  // Filter to only displayable content parts (text with content, or base64 images)
-  val displayableContent = message.content.filter { part ->
-    when (part.type) {
-      "text" -> !part.text.isNullOrBlank()
-      else -> part.base64 != null
-    }
-  }
-
-  // Skip rendering entirely if no displayable content
-  if (displayableContent.isEmpty()) return
-
->>>>>>> 292150259 (fix: commit missing refreshConfigFromDisk type for CI build)
   Row(
     modifier = modifier.fillMaxWidth(),
     horizontalArrangement = if (style.alignEnd) Arrangement.End else Arrangement.Start,
@@ -110,17 +96,12 @@ private fun ChatBubbleContainer(
         modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
       ) {
-<<<<<<< HEAD
         Text(
           text = roleLabel,
           style = mobileCaption2.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
           color = style.roleColor,
         )
         content()
-=======
-        val textColor = textColorOverBubble(isUser)
-        ChatMessageBody(content = displayableContent, textColor = textColor)
->>>>>>> 292150259 (fix: commit missing refreshConfigFromDisk type for CI build)
       }
     }
   }
@@ -170,7 +151,7 @@ fun ChatPendingToolsBubble(toolCalls: List<ChatPendingToolCall>) {
 
   ChatBubbleContainer(
     style = bubbleStyle("assistant"),
-    roleLabel = "TOOLS",
+    roleLabel = "Tools",
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
       Text("Running tools...", style = mobileCaption1.copy(fontWeight = FontWeight.SemiBold), color = mobileTextSecondary)
@@ -207,7 +188,7 @@ fun ChatPendingToolsBubble(toolCalls: List<ChatPendingToolCall>) {
 fun ChatStreamingAssistantBubble(text: String) {
   ChatBubbleContainer(
     style = bubbleStyle("assistant").copy(borderColor = mobileAccent),
-    roleLabel = "ASSISTANT · LIVE",
+    roleLabel = "OpenClaw · Live",
   ) {
     ChatMarkdown(text = text, textColor = mobileText)
   }
@@ -243,9 +224,9 @@ private fun bubbleStyle(role: String): ChatBubbleStyle {
 
 private fun roleLabel(role: String): String {
   return when (role) {
-    "user" -> "USER"
-    "system" -> "SYSTEM"
-    else -> "ASSISTANT"
+    "user" -> "You"
+    "system" -> "System"
+    else -> "OpenClaw"
   }
 }
 
