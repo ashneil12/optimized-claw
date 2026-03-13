@@ -70,9 +70,6 @@ IMAGE_MODEL="${OPENCLAW_IMAGE_MODEL:-${DEFAULT_MODEL}}"
 MAX_CONCURRENT="${OPENCLAW_MAX_CONCURRENT:-4}"
 SUBAGENT_MAX_CONCURRENT="${OPENCLAW_SUBAGENT_MAX_CONCURRENT:-8}"
 
-# Agent workspace directory (where SOUL.md, WORKING.md, memory/ etc live)
-WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-${CLAWDBOT_WORKSPACE_DIR:-/home/node/workspace}}"
-
 # AI Gateway URL (for credits mode - routes through Dashboard's gateway)
 # When set, configures vercel-ai-gateway provider to use Dashboard as proxy
 AI_GATEWAY_URL="${OPENCLAW_AI_GATEWAY_URL:-}"
