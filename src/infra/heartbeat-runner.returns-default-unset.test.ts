@@ -59,20 +59,20 @@ beforeAll(async () => {
     outbound: {
       deliveryMode: "direct",
       sendText: async ({ to, text, deps, accountId }) => {
-        if (!deps?.sendTelegram) {
+        if (!deps?.["telegram"]) {
           throw new Error("sendTelegram missing");
         }
-        const res = await deps.sendTelegram(to, text, {
+        const res = await (deps["telegram"] as Function)(to, text, {
           verbose: false,
           accountId: accountId ?? undefined,
         });
         return { channel: "telegram", messageId: res.messageId, chatId: res.chatId };
       },
       sendMedia: async ({ to, text, mediaUrl, deps, accountId }) => {
-        if (!deps?.sendTelegram) {
+        if (!deps?.["telegram"]) {
           throw new Error("sendTelegram missing");
         }
-        const res = await deps.sendTelegram(to, text, {
+        const res = await (deps["telegram"] as Function)(to, text, {
           verbose: false,
           accountId: accountId ?? undefined,
           mediaUrl,
@@ -479,10 +479,14 @@ describe("resolveHeartbeatSenderContext", () => {
 
 describe("runHeartbeatOnce", () => {
   const createHeartbeatDeps = (
-    sendWhatsApp: NonNullable<HeartbeatDeps["sendWhatsApp"]>,
+    sendWhatsApp: (
+      to: string,
+      text: string,
+      opts?: unknown,
+    ) => Promise<{ messageId: string; toJid: string }>,
     nowMs = 0,
   ): HeartbeatDeps => ({
-    sendWhatsApp,
+    whatsapp: sendWhatsApp,
     getQueueSize: () => 0,
     nowMs: () => nowMs,
     webAuthExists: async () => true,
@@ -561,10 +565,18 @@ describe("runHeartbeatOnce", () => {
       );
 
       replySpy.mockResolvedValue([{ text: "Let me check..." }, { text: "Final alert" }]);
-      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
-        messageId: "m1",
-        toJid: "jid",
-      });
+      const sendWhatsApp = vi
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
+        .mockResolvedValue({
+          messageId: "m1",
+          toJid: "jid",
+        });
 
       await runHeartbeatOnce({
         cfg,
@@ -618,10 +630,18 @@ describe("runHeartbeatOnce", () => {
         }),
       );
       replySpy.mockResolvedValue([{ text: "Final alert" }]);
-      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
-        messageId: "m1",
-        toJid: "jid",
-      });
+      const sendWhatsApp = vi
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
+        .mockResolvedValue({
+          messageId: "m1",
+          toJid: "jid",
+        });
       await runHeartbeatOnce({
         cfg,
         agentId: "ops",
@@ -696,10 +716,18 @@ describe("runHeartbeatOnce", () => {
       );
 
       replySpy.mockResolvedValue([{ text: "Final alert" }]);
-      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
-        messageId: "m1",
-        toJid: "jid",
-      });
+      const sendWhatsApp = vi
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
+        .mockResolvedValue({
+          messageId: "m1",
+          toJid: "jid",
+        });
       const result = await runHeartbeatOnce({
         cfg,
         agentId,
@@ -813,7 +841,13 @@ describe("runHeartbeatOnce", () => {
         replySpy.mockClear();
         replySpy.mockResolvedValue([{ text: testCase.message }]);
         const sendWhatsApp = vi
-          .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+          .fn<
+            (
+              to: string,
+              text: string,
+              opts?: unknown,
+            ) => Promise<{ messageId: string; toJid: string }>
+          >()
           .mockResolvedValue({ messageId: "m1", toJid: "jid" });
 
         await runHeartbeatOnce({
@@ -877,7 +911,13 @@ describe("runHeartbeatOnce", () => {
 
       replySpy.mockResolvedValue([{ text: "Final alert" }]);
       const sendWhatsApp = vi
-        .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
         .mockResolvedValue({ messageId: "m1", toJid: "jid" });
 
       await runHeartbeatOnce({
@@ -949,7 +989,13 @@ describe("runHeartbeatOnce", () => {
         replySpy.mockClear();
         replySpy.mockResolvedValue(testCase.replies);
         const sendWhatsApp = vi
-          .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+          .fn<
+            (
+              to: string,
+              text: string,
+              opts?: unknown,
+            ) => Promise<{ messageId: string; toJid: string }>
+          >()
           .mockResolvedValue({ messageId: "m1", toJid: "jid" });
 
         await runHeartbeatOnce({
@@ -1004,10 +1050,18 @@ describe("runHeartbeatOnce", () => {
       );
 
       replySpy.mockResolvedValue({ text: "Hello from heartbeat" });
-      const sendWhatsApp = vi.fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>().mockResolvedValue({
-        messageId: "m1",
-        toJid: "jid",
-      });
+      const sendWhatsApp = vi
+        .fn<
+          (
+            to: string,
+            text: string,
+            opts?: unknown,
+          ) => Promise<{ messageId: string; toJid: string }>
+        >()
+        .mockResolvedValue({
+          messageId: "m1",
+          toJid: "jid",
+        });
 
       await runHeartbeatOnce({
         cfg,
@@ -1087,7 +1141,9 @@ describe("runHeartbeatOnce", () => {
     const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
     replySpy.mockResolvedValue({ text: params.replyText ?? "Checked logs and PRs" });
     const sendWhatsApp = vi
-      .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+      .fn<
+        (to: string, text: string, opts?: unknown) => Promise<{ messageId: string; toJid: string }>
+      >()
       .mockResolvedValue({ messageId: "m1", toJid: "jid" });
     const res = await runHeartbeatOnce({
       cfg,
@@ -1253,7 +1309,9 @@ describe("runHeartbeatOnce", () => {
     const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
     replySpy.mockResolvedValue({ text: "Handled internally" });
     const sendWhatsApp = vi
-      .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+      .fn<
+        (to: string, text: string, opts?: unknown) => Promise<{ messageId: string; toJid: string }>
+      >()
       .mockResolvedValue({ messageId: "m1", toJid: "jid" });
 
     try {
@@ -1306,7 +1364,9 @@ describe("runHeartbeatOnce", () => {
     const replySpy = vi.spyOn(replyModule, "getReplyFromConfig");
     replySpy.mockResolvedValue({ text: "Handled internally" });
     const sendWhatsApp = vi
-      .fn<NonNullable<HeartbeatDeps["sendWhatsApp"]>>()
+      .fn<
+        (to: string, text: string, opts?: unknown) => Promise<{ messageId: string; toJid: string }>
+      >()
       .mockResolvedValue({ messageId: "m1", toJid: "jid" });
 
     try {

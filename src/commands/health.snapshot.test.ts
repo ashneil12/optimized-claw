@@ -2,10 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HealthSummary } from "./health.js";
 import { telegramPlugin } from "../../extensions/telegram/src/channel.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 import { createTestRegistry } from "../test-utils/channel-plugins.js";
+import type { HealthSummary } from "./health.js";
 import { getHealthSnapshot } from "./health.js";
 
 let testConfig: Record<string, unknown> = {};
@@ -27,7 +27,7 @@ vi.mock("../config/sessions.js", () => ({
   updateLastRoute: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../web/auth-store.js", () => ({
+vi.mock("../../extensions/whatsapp/src/auth-store.js", () => ({
   webAuthExists: vi.fn(async () => true),
   getWebAuthAgeMs: vi.fn(() => 1234),
   readWebSelfId: vi.fn(() => ({ e164: null, jid: null })),
