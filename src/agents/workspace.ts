@@ -35,7 +35,6 @@ export const DEFAULT_MEMORY_ALT_FILENAME = "memory.md";
 export const DEFAULT_DIARY_FILENAME = "diary.md";
 export const DEFAULT_KNOWLEDGE_INDEX_FILENAME = "_index.md";
 export const DEFAULT_OPERATIONS_FILENAME = "OPERATIONS.md";
-export const DEFAULT_PRACTICAL_FILENAME = "PRACTICAL.md";
 export const DEFAULT_MEMORY_HYGIENE_FILENAME = "memory-hygiene.md";
 export const DEFAULT_HUMAN_GUIDE_FILENAME = "openclaw-human-v1.md";
 export const DEFAULT_BUSINESS_GUIDE_FILENAME = "openclaw-business-v1.md";
@@ -308,7 +307,6 @@ export type WorkspaceBootstrapFileName =
   | typeof DEFAULT_DIARY_FILENAME
   | typeof DEFAULT_KNOWLEDGE_INDEX_FILENAME
   | typeof DEFAULT_OPERATIONS_FILENAME
-  | typeof DEFAULT_PRACTICAL_FILENAME
   | typeof DEFAULT_MEMORY_HYGIENE_FILENAME
   | typeof DEFAULT_HUMAN_GUIDE_FILENAME
   | typeof DEFAULT_BUSINESS_GUIDE_FILENAME
@@ -608,13 +606,10 @@ export async function ensureAgentWorkspace(params?: {
 
   // Seed extra context files from templates
   const operationsPath = path.join(dir, DEFAULT_OPERATIONS_FILENAME);
-  const practicalPath = path.join(dir, DEFAULT_PRACTICAL_FILENAME);
   const memoryHygienePath = path.join(dir, DEFAULT_MEMORY_HYGIENE_FILENAME);
   const operationsTemplate = await loadTemplate(DEFAULT_OPERATIONS_FILENAME);
-  const practicalTemplate = await loadTemplate(DEFAULT_PRACTICAL_FILENAME);
   const memoryHygieneTemplate = await loadTemplate(DEFAULT_MEMORY_HYGIENE_FILENAME);
   await writeFileIfMissing(operationsPath, operationsTemplate);
-  await writeFileIfMissing(practicalPath, practicalTemplate);
   await writeFileIfMissing(memoryHygienePath, memoryHygieneTemplate);
 
   // Seed MEMORY.md — top-level long-term memory file (accessed via memory_search/QMD, not context)
@@ -798,10 +793,10 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
   // They can grow very large and should be accessed via memory_search (QMD),
   // not injected into the system prompt on every message.
 
-  // Extra context files: OPERATIONS, PRACTICAL, memory-hygiene (always optional).
-  // PRACTICAL.md and memory-hygiene.md are seeded into the workspace but NOT
-  // injected into context — their content overlaps with SOUL.md, OPERATIONS.md,
-  // and hardcoded system prompt sections. They remain as reference files.
+  // Extra context files: OPERATIONS, human guide (always optional).
+  // memory-hygiene.md is seeded into the workspace but NOT
+  // injected into context — its content overlaps with SOUL.md, OPERATIONS.md,
+  // and hardcoded system prompt sections. It remains as a reference file.
   const extraContextFiles: Array<{ name: WorkspaceBootstrapFileName; filePath: string }> = [
     {
       name: DEFAULT_OPERATIONS_FILENAME,
