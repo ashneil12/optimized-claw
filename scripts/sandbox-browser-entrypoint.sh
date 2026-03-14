@@ -92,6 +92,11 @@ CHROME_ARGS+=(
   # ── Stealth flags ──
   "--disable-blink-features=AutomationControlled"
   "--lang=en-US"
+  # ── Chrome 146 native AI/WebMCP support ──
+  # Enables the WebMCP protocol so AI agents can interface natively with Chrome
+  # via the Chrome DevTools MCP server instead of falling back to Playwright.
+  "--enable-features=WebMCP"
+  "--enable-experimental-web-platform-features"
 )
 
 # Stealth: optional user-agent override

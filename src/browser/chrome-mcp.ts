@@ -29,14 +29,33 @@ type ChromeMcpSession = {
 type ChromeMcpSessionFactory = (profileName: string) => Promise<ChromeMcpSession>;
 
 const DEFAULT_CHROME_MCP_COMMAND = "npx";
-const DEFAULT_CHROME_MCP_ARGS = [
+const DEFAULT_CHROME_MCP_BASE_ARGS = [
   "-y",
   "chrome-devtools-mcp@latest",
-  "--autoConnect",
   // Direct chrome-devtools-mcp launches do not enable structuredContent by default.
   "--experimentalStructuredContent",
   "--experimental-page-id-routing",
 ];
+
+/**
+ * Per-profile CDP URL registry.
+ * When a profile has a remote cdpUrl (e.g. a Hetzner container), register it here
+ * before creating a session so chrome-devtools-mcp can connect via --browserUrl
+ * instead of trying to autoConnect to a local Chrome instance.
+ */
+const profileCdpUrls = new Map<string, string>();
+
+/** Build the args for chrome-devtools-mcp based on whether a remote cdpUrl is registered. */
+function buildChromeMcpArgs(profileName: string): string[] {
+  const cdpUrl = profileCdpUrls.get(profileName);
+  if (cdpUrl) {
+    // Remote browser: connect to the given CDP HTTP URL.
+    // chrome-devtools-mcp fetches /json/version from this URL to obtain the WS endpoint.
+    return [...DEFAULT_CHROME_MCP_BASE_ARGS, `--browserUrl=${cdpUrl}`];
+  }
+  // Local browser: use autoConnect which attaches to a locally running Chrome.
+  return [...DEFAULT_CHROME_MCP_BASE_ARGS, "--autoConnect"];
+}
 
 const sessions = new Map<string, ChromeMcpSession>();
 const pendingSessions = new Map<string, Promise<ChromeMcpSession>>();
@@ -171,7 +190,7 @@ function extractJsonMessage(result: ChromeMcpToolResult): unknown {
 async function createRealSession(profileName: string): Promise<ChromeMcpSession> {
   const transport = new StdioClientTransport({
     command: DEFAULT_CHROME_MCP_COMMAND,
-    args: DEFAULT_CHROME_MCP_ARGS,
+    args: buildChromeMcpArgs(profileName),
     stderr: "pipe",
   });
   const client = new Client(
@@ -285,6 +304,16 @@ async function findPageById(profileName: string, pageId: number): Promise<Chrome
     throw new BrowserTabNotFoundError();
   }
   return page;
+}
+
+/**
+ * Register a remote CDP URL for a profile before creating a session.
+ * When set, chrome-devtools-mcp will connect to this URL via --browserUrl
+ * instead of auto-connecting to a local Chrome instance.
+ * Call this from server-context.availability before ensureChromeMcpAvailable.
+ */
+export function registerChromeMcpCdpUrl(profileName: string, cdpUrl: string): void {
+  profileCdpUrls.set(profileName, cdpUrl);
 }
 
 export async function ensureChromeMcpAvailable(profileName: string): Promise<void> {

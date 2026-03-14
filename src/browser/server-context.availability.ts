@@ -7,6 +7,7 @@ import {
   closeChromeMcpSession,
   ensureChromeMcpAvailable,
   listChromeMcpTabs,
+  registerChromeMcpCdpUrl,
 } from "./chrome-mcp.js";
 import {
   isChromeCdpReady,
@@ -155,6 +156,12 @@ export function createProfileAvailability({
   const ensureBrowserAvailable = async (): Promise<void> => {
     await reconcileProfileRuntime();
     if (capabilities.usesChromeMcp) {
+      // Register the profile's cdpUrl so chrome-devtools-mcp knows where to connect.
+      // For remote profiles (e.g. Hetzner containers) this causes the MCP server to
+      // use --browserUrl=<cdpUrl> instead of --autoConnect (which requires local Chrome).
+      if (profile.cdpUrl) {
+        registerChromeMcpCdpUrl(profile.name, profile.cdpUrl);
+      }
       await ensureChromeMcpAvailable(profile.name);
       return;
     }
